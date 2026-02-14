@@ -1,0 +1,5 @@
+{
+  "name": "RiceManager",
+  "description": "A comprehensive meal management system for rice meal tracking, member management, and monthly billing summaries using Firebase.",
+  "requestFramePermissions": []
+}
