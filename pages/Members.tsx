@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { Button } from '../components/Button';
-import { Plus, Edit2, Trash2, Phone, MapPin, Calendar, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Phone, MapPin, Calendar, X, User } from 'lucide-react';
 import { Member } from '../types';
 import { format } from 'date-fns';
 
@@ -54,7 +54,7 @@ export const Members: React.FC = () => {
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this member? This cannot be undone.")) {
+    if (window.confirm("Are you sure you want to delete this member?")) {
       try {
         await deleteDoc(doc(db, 'members', id));
       } catch (error) {
@@ -83,136 +83,164 @@ export const Members: React.FC = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Members</h2>
-          <p className="text-slate-500">Manage your mess members</p>
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Members</h2>
+          <p className="text-slate-500 text-sm">Total: {members.length} members</p>
         </div>
-        <Button onClick={() => openModal()}>
-          <Plus className="h-4 w-4" />
-          Add Member
+        <Button onClick={() => openModal()} className="shadow-red-200">
+          <Plus className="h-5 w-5" />
+          <span className="hidden md:inline">Add Member</span>
+          <span className="md:hidden">Add</span>
         </Button>
       </div>
 
       {loading ? (
-        <div className="text-center py-12">Loading members...</div>
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div></div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-xs uppercase text-slate-500 font-semibold">
-                  <th className="px-6 py-4">Member Info</th>
-                  <th className="px-6 py-4">Contact</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">Joined</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
+        <>
+        {/* Desktop Table View */}
+        <div className="hidden md:block bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-red-50/50 border-b border-red-100 text-xs uppercase text-red-600 font-bold">
+                <th className="px-6 py-4">Member Info</th>
+                <th className="px-6 py-4">Contact</th>
+                <th className="px-6 py-4">Status</th>
+                <th className="px-6 py-4">Joined</th>
+                <th className="px-6 py-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {members.map((member) => (
+                <tr key={member.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="font-semibold text-slate-800">{member.fullName}</div>
+                    {member.address && <div className="text-xs text-slate-500 mt-1 flex items-center gap-1"><MapPin className="h-3 w-3"/>{member.address}</div>}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-600">{member.phone}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                      member.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {member.status.toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm text-slate-500">{member.joinDate}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => openModal(member)} className="p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition">
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleDelete(member.id)} className="p-2 text-slate-500 hover:bg-red-50 hover:text-red-600 rounded-lg transition">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{member.fullName}</div>
-                      {member.address && (
-                        <div className="text-xs text-slate-500 flex items-center gap-1 mt-1">
-                          <MapPin className="h-3 w-3" /> {member.address}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-slate-600 flex items-center gap-2">
-                         <Phone className="h-3 w-3" /> {member.phone}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        member.status === 'active' 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-slate-100 text-slate-500'
-                      }`}>
-                        {member.status.charAt(0).toUpperCase() + member.status.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3" />
-                        {member.joinDate}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button onClick={() => openModal(member)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button onClick={() => handleDelete(member.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {members.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-slate-500">
-                      No members found. Add one to get started.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              ))}
+              {members.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-slate-500">No members found.</td></tr>}
+            </tbody>
+          </table>
         </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-3">
+          {members.map((member) => (
+            <div key={member.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-3">
+               <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-3">
+                     <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                        <User className="h-5 w-5" />
+                     </div>
+                     <div>
+                        <h3 className="font-bold text-slate-800">{member.fullName}</h3>
+                        <div className="text-xs text-slate-500 flex items-center gap-1">
+                           <Phone className="h-3 w-3" /> {member.phone}
+                        </div>
+                     </div>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      member.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {member.status}
+                  </span>
+               </div>
+               
+               {member.address && (
+                 <div className="text-xs text-slate-500 flex items-center gap-1 bg-slate-50 p-2 rounded-lg">
+                    <MapPin className="h-3 w-3 text-red-400" /> {member.address}
+                 </div>
+               )}
+
+               <div className="flex justify-between items-center pt-2 border-t border-slate-100 mt-1">
+                  <span className="text-xs text-slate-400">Joined: {member.joinDate}</span>
+                  <div className="flex gap-2">
+                      <button onClick={() => openModal(member)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-red-50 text-red-600 rounded-lg active:scale-95 transition">
+                        Edit
+                      </button>
+                      <button onClick={() => handleDelete(member.id)} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-slate-100 text-slate-600 rounded-lg active:scale-95 transition">
+                        Delete
+                      </button>
+                  </div>
+               </div>
+            </div>
+          ))}
+          {members.length === 0 && <div className="text-center p-8 text-slate-500 bg-white rounded-xl">No members found.</div>}
+        </div>
+        </>
       )}
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={closeModal} />
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md relative z-10 p-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md relative z-10 p-6 animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold text-slate-800">
+              <h3 className="text-xl font-bold text-slate-800">
                 {editingId ? 'Edit Member' : 'Add New Member'}
               </h3>
-              <button onClick={closeModal} className="text-slate-400 hover:text-slate-600">
+              <button onClick={closeModal} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
                 <X className="h-5 w-5" />
               </button>
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Full Name *</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
                 <input
                   type="text"
                   required
+                  placeholder="e.g. Karim Ahmed"
                   value={formData.fullName}
                   onChange={e => setFormData({...formData, fullName: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all text-base"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number *</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Phone Number</label>
                 <input
                   type="tel"
                   required
+                  placeholder="017..."
                   value={formData.phone}
                   onChange={e => setFormData({...formData, phone: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all text-base"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Address (Optional)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Address (Optional)</label>
                 <input
                   type="text"
                   value={formData.address}
                   onChange={e => setFormData({...formData, address: e.target.value})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all text-base"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Status</label>
                 <select
                   value={formData.status}
                   onChange={e => setFormData({...formData, status: e.target.value as 'active'|'inactive'})}
-                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all bg-white text-base"
                 >
                   <option value="active">Active</option>
                   <option value="inactive">Inactive</option>
@@ -220,8 +248,8 @@ export const Members: React.FC = () => {
               </div>
 
               <div className="pt-4 flex gap-3">
-                <Button type="button" variant="secondary" onClick={closeModal} className="flex-1">Cancel</Button>
-                <Button type="submit" className="flex-1">Save Member</Button>
+                <Button type="button" variant="secondary" onClick={closeModal} className="flex-1 py-3">Cancel</Button>
+                <Button type="submit" className="flex-1 py-3">Save</Button>
               </div>
             </form>
           </div>

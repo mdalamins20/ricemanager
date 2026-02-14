@@ -3,7 +3,7 @@ import { db } from '../firebase';
 import { collection, query, where, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { Button } from '../components/Button';
-import { Calendar as CalendarIcon, Save } from 'lucide-react';
+import { Calendar as CalendarIcon, Save, Moon, Sun } from 'lucide-react';
 import { Member, DailyMealDoc, AppSettings } from '../types';
 
 export const MealEntry: React.FC = () => {
@@ -17,13 +17,11 @@ export const MealEntry: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Get Active Members
       const mQuery = query(collection(db, 'members'), where('status', '==', 'active'));
       const mSnap = await getDocs(mQuery);
       const activeMembers = mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Member));
       setMembers(activeMembers);
 
-      // 2. Get Existing Entries for Date
       const mealDocRef = doc(db, 'meals', selectedDate);
       const mealDoc = await getDoc(mealDocRef);
       
@@ -35,19 +33,16 @@ export const MealEntry: React.FC = () => {
           currentEntries[m.id] = data.entries[m.id] || { lunch: false, dinner: false };
         });
       } else {
-        // Initialize defaults
         activeMembers.forEach(m => {
           currentEntries[m.id] = { lunch: false, dinner: false };
         });
       }
       setEntries(currentEntries);
 
-      // 3. Get Price (for display calculations)
       const settingsSnap = await getDoc(doc(db, 'settings', 'config'));
       if(settingsSnap.exists()) {
           setPrice((settingsSnap.data() as AppSettings).mealPrice);
       }
-
     } catch (err) {
       console.error(err);
     } finally {
@@ -77,103 +72,103 @@ export const MealEntry: React.FC = () => {
         date: selectedDate,
         entries: entries
       }, { merge: true });
-      alert('Meals saved successfully!');
+      // Use simple alert or toast
+      // alert('Saved!'); 
     } catch (err) {
       console.error(err);
-      alert('Failed to save meals.');
+      alert('Failed to save.');
     } finally {
       setSaving(false);
     }
   };
 
-  // Calculate totals for UI
-  const totalMeals = Object.values(entries).reduce<number>((acc, curr) => acc + (curr.lunch ? 1 : 0) + (curr.dinner ? 1 : 0), 0);
+  const totalMeals = Object.values(entries).reduce<number>((acc, curr: { lunch: boolean; dinner: boolean }) => acc + (curr.lunch ? 1 : 0) + (curr.dinner ? 1 : 0), 0);
   const totalCost = totalMeals * price;
 
+  // Toggle Component for Mobile
+  const MealToggle = ({ active, onClick, icon: Icon, colorClass, label }: any) => (
+    <button 
+      onClick={onClick}
+      className={`flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border-2 transition-all duration-200 active:scale-95
+        ${active 
+          ? `${colorClass} border-transparent shadow-sm` 
+          : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+        }`}
+    >
+      <Icon className={`h-6 w-6 ${active ? 'fill-current' : ''}`} />
+      <span className="text-xs font-bold uppercase">{label}</span>
+    </button>
+  );
+
   return (
-    <div>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+    <div className="pb-24 md:pb-0 relative">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-6 sticky top-[60px] md:static z-20 bg-slate-50 py-2 md:py-0">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Daily Meal Entry</h2>
-          <p className="text-slate-500">Mark lunch and dinner for members</p>
+          <h2 className="text-2xl font-bold text-slate-800">Meal Entry</h2>
         </div>
         
-        <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-          <CalendarIcon className="h-5 w-5 text-slate-500 ml-2" />
+        <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-red-100 shadow-sm w-full md:w-auto">
+          <CalendarIcon className="h-5 w-5 text-red-500 ml-2" />
           <input
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="outline-none text-slate-700 font-medium bg-transparent"
+            className="outline-none text-slate-800 font-bold bg-transparent flex-1 text-lg"
           />
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-            <div className="text-sm font-medium text-slate-600">
-                Total Meals: <span className="text-slate-900 font-bold">{totalMeals}</span>
-                <span className="mx-3 text-slate-300">|</span>
-                Estimated Cost: <span className="text-green-600 font-bold">৳{totalCost}</span>
-            </div>
-            <Button onClick={handleSave} isLoading={saving} className="text-sm py-1">
-                <Save className="h-4 w-4" /> Save Changes
-            </Button>
+      {loading ? (
+        <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div></div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {members.map(member => {
+                const entry = entries[member.id] || { lunch: false, dinner: false };
+                return (
+                    <div key={member.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                        <div className="flex justify-between items-center mb-3">
+                             <span className="font-bold text-slate-800 text-lg">{member.fullName}</span>
+                             <div className="bg-slate-100 text-slate-500 text-xs font-bold px-2 py-1 rounded">
+                                 Total: {(entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0)}
+                             </div>
+                        </div>
+                        
+                        <div className="flex gap-3">
+                            <MealToggle 
+                                active={entry.lunch} 
+                                onClick={() => toggleMeal(member.id, 'lunch')}
+                                icon={Sun}
+                                label="Lunch"
+                                colorClass="bg-amber-100 text-amber-700 border-amber-200"
+                            />
+                            <MealToggle 
+                                active={entry.dinner} 
+                                onClick={() => toggleMeal(member.id, 'dinner')}
+                                icon={Moon}
+                                label="Dinner"
+                                colorClass="bg-indigo-100 text-indigo-700 border-indigo-200"
+                            />
+                        </div>
+                    </div>
+                )
+            })}
         </div>
+      )}
 
-        {loading ? (
-          <div className="p-12 text-center text-slate-500">Loading data...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-slate-100 text-xs uppercase text-slate-500 font-semibold">
-                  <th className="px-6 py-4">Member Name</th>
-                  <th className="px-6 py-4 text-center">Lunch</th>
-                  <th className="px-6 py-4 text-center">Dinner</th>
-                  <th className="px-6 py-4 text-center">Summary</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {members.map(member => {
-                  const entry = entries[member.id] || { lunch: false, dinner: false };
-                  return (
-                    <tr key={member.id} className="hover:bg-slate-50">
-                      <td className="px-6 py-4 font-medium text-slate-900">
-                        {member.fullName}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            className="sr-only peer"
-                            checked={entry.lunch}
-                            onChange={() => toggleMeal(member.id, 'lunch')}
-                          />
-                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input 
-                            type="checkbox" 
-                            className="sr-only peer"
-                            checked={entry.dinner}
-                            onChange={() => toggleMeal(member.id, 'dinner')}
-                          />
-                          <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
-                        </label>
-                      </td>
-                      <td className="px-6 py-4 text-center text-sm font-bold text-slate-700">
-                        {(entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* Sticky Bottom Bar for Mobile & Desktop */}
+      <div className="fixed bottom-0 left-0 md:left-64 right-0 bg-white border-t border-slate-200 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-30 flex justify-between items-center">
+         <div className="flex flex-col">
+            <span className="text-xs text-slate-500 font-medium uppercase">Summary</span>
+            <div className="flex items-baseline gap-1">
+                <span className="text-xl font-bold text-slate-900">{totalMeals}</span>
+                <span className="text-sm text-slate-400">meals</span>
+            </div>
+            <span className="text-xs font-bold text-red-600">৳{totalCost}</span>
+         </div>
+         <Button onClick={handleSave} isLoading={saving} className="px-8 py-3 rounded-xl shadow-red-200 text-base">
+            <Save className="h-5 w-5" />
+            Save Data
+         </Button>
       </div>
     </div>
   );

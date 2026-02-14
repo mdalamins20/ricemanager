@@ -43,47 +43,47 @@ export const Settings: React.FC = () => {
     }
   };
 
-  if (loading) return <div className="p-8">Loading settings...</div>;
+  if (loading) return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div></div>;
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-slate-100 rounded-lg">
-           <SettingsIcon className="h-6 w-6 text-slate-600" />
+        <div className="p-3 bg-red-50 rounded-xl">
+           <SettingsIcon className="h-6 w-6 text-red-600" />
         </div>
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Settings</h2>
-          <p className="text-slate-500">Configure global application parameters</p>
+          <p className="text-slate-500 text-sm">Configure global application parameters</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-lg font-semibold text-slate-800 mb-4 border-b border-slate-100 pb-2">Meal Pricing</h3>
+        <h3 className="text-lg font-bold text-slate-800 mb-6 border-b border-slate-100 pb-3">Meal Configuration</h3>
         
         <form onSubmit={handleSave} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Meal Price (BDT)</label>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Meal Price (BDT)</label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-slate-500 font-medium">৳</span>
+                <span className="absolute left-4 top-3.5 text-slate-500 font-bold text-lg">৳</span>
                 <input
                   type="number"
                   min="0"
                   required
                   value={price}
                   onChange={(e) => setPrice(Number(e.target.value))}
-                  className="w-full pl-8 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-lg font-medium"
                 />
               </div>
-              <p className="text-xs text-slate-500 mt-2">
-                This price will be used to calculate the monthly payable amount for all members.
+              <p className="text-sm text-slate-500 mt-2 leading-relaxed">
+                This price will be used to calculate the monthly payable amount for all members. Changing this will affect reports.
               </p>
             </div>
           </div>
 
           <div className="flex justify-end pt-4">
-            <Button type="submit" isLoading={saving}>
-              <Save className="h-4 w-4" />
+            <Button type="submit" isLoading={saving} className="px-8 py-3">
+              <Save className="h-5 w-5" />
               Save Configuration
             </Button>
           </div>
