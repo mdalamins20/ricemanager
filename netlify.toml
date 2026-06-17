@@ -1,0 +1,12 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[dev]
+  command = "npm run dev"
+
+# Fallback for Single Page Applications (Optional with HashRouter, but good practice)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

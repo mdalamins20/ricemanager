@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged, User } from 'firebase/auth';
+import firebase from 'firebase/compat/app';
 import { auth } from './firebase';
 
 // Components & Pages
@@ -11,63 +12,65 @@ import { Members } from './pages/Members';
 import { MealEntry } from './pages/MealEntry';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
+import { Money } from './pages/Money';
+import { ViewReport } from './pages/ViewReport';
+import { DataProvider } from './DataContext';
 
-// Protected Route Wrapper
+// Protected Route Wrapper (Only for Admin pages like Settings)
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<firebase.User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  if (loading) return <div className="h-screen flex items-center justify-center">Loading...</div>;
+  if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
 
-  return <Layout>{children}</Layout>;
+  return <>{children}</>;
 };
 
 const App: React.FC = () => {
+  // Global auth listener to handle layout updates
+  const [user, setUser] = useState<firebase.User | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
   return (
-    <HashRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        
-        <Route path="/" element={
-          <ProtectedRoute>
-            <Dashboard />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/members" element={
-          <ProtectedRoute>
-            <Members />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/meals" element={
-          <ProtectedRoute>
-            <MealEntry />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/reports" element={
-          <ProtectedRoute>
-            <Reports />
-          </ProtectedRoute>
-        } />
-        
-        <Route path="/settings" element={
-          <ProtectedRoute>
-            <Settings />
-          </ProtectedRoute>
-        } />
-      </Routes>
-    </HashRouter>
+    <DataProvider>
+      <HashRouter>
+        <Layout>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            
+            {/* Public Routes (Read Access for Everyone) */}
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/members" element={<Members />} />
+            <Route path="/meals" element={<MealEntry />} />
+            <Route path="/money" element={<Money />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/view-report" element={<ViewReport />} />
+            
+            {/* Protected Routes (Admin Only) */}
+            <Route path="/settings" element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            } />
+          </Routes>
+        </Layout>
+      </HashRouter>
+    </DataProvider>
   );
 };
 

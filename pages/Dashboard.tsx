@@ -1,134 +1,161 @@
-import React, { useEffect, useState } from 'react';
-import { db } from '../firebase';
-import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
-import { Users, Utensils, TrendingUp, Wallet } from 'lucide-react';
+
+import React, { useMemo } from 'react';
+import { UsersRound, UtensilsCrossed, Banknote, Wallet, TrendingUp, TrendingDown, Receipt, Calculator, ChefHat, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
-import { AppSettings, DailyMealDoc } from '../types';
+import { useData } from '../DataContext';
 
 export const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState({
-    activeMembers: 0,
-    todayMeals: 0,
-    todayIncome: 0,
-    monthIncome: 0,
-  });
-  const [loading, setLoading] = useState(true);
+  const { members, allMeals, allDeposits, settings } = useData();
+  const now = new Date();
+  const currentMonthName = format(now, 'MMMM yyyy');
+  const currentMonthPrefix = format(now, 'yyyy-MM');
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const todayStr = format(new Date(), 'yyyy-MM-dd');
-        const currentMonthPrefix = format(new Date(), 'yyyy-MM');
-
-        // 1. Get Settings (Price)
-        const settingsSnap = await getDoc(doc(db, 'settings', 'config'));
-        const price = settingsSnap.exists() ? (settingsSnap.data() as AppSettings).mealPrice : 65;
-
-        // 2. Active Members
-        const membersQuery = query(collection(db, 'members'), where('status', '==', 'active'));
-        const membersSnap = await getDocs(membersQuery);
-        const activeMembers = membersSnap.size;
-
-        // 3. Today's Data
-        const todayDoc = await getDoc(doc(db, 'meals', todayStr));
-        let todayMealsCount = 0;
-        if (todayDoc.exists()) {
-          const data = todayDoc.data() as DailyMealDoc;
-          Object.values(data.entries || {}).forEach(entry => {
-            if (entry.lunch) todayMealsCount++;
-            if (entry.dinner) todayMealsCount++;
-          });
-        }
-
-        // 4. Monthly Income
-        let monthMealsCount = 0;
-        const daysInMonth = 31; 
-        const monthQueryPromises = [];
-        for(let i = 1; i <= daysInMonth; i++) {
-           const dayStr = `${currentMonthPrefix}-${String(i).padStart(2, '0')}`;
-           monthQueryPromises.push(getDoc(doc(db, 'meals', dayStr)));
-        }
-        
-        const monthDocs = await Promise.all(monthQueryPromises);
-        monthDocs.forEach(d => {
-            if(d.exists()) {
-                const data = d.data() as DailyMealDoc;
-                Object.values(data.entries || {}).forEach(entry => {
-                    if (entry.lunch) monthMealsCount++;
-                    if (entry.dinner) monthMealsCount++;
-                });
-            }
+  const stats = useMemo(() => {
+    const activeMembers = members.filter(m => m.status === 'active').length;
+    const mealPrice = settings?.mealPrice || 65;
+    
+    let monthMealsCount = 0;
+    allMeals.forEach(mDoc => {
+      if (mDoc.date.startsWith(currentMonthPrefix)) {
+        Object.values(mDoc.entries || {}).forEach(entry => {
+          if (entry.lunch) monthMealsCount++;
+          if (entry.dinner) monthMealsCount++;
+          if (entry.guestLunch) monthMealsCount += entry.guestLunch;
+          if (entry.guestDinner) monthMealsCount += entry.guestDinner;
         });
-
-        setStats({
-          activeMembers,
-          todayMeals: todayMealsCount,
-          todayIncome: todayMealsCount * price,
-          monthIncome: monthMealsCount * price,
-        });
-      } catch (error) {
-        console.error("Error fetching stats:", error);
-      } finally {
-        setLoading(false);
       }
+    });
+
+    let monthDepositAmount = 0;
+    allDeposits.forEach(d => {
+      if (d.date.startsWith(currentMonthPrefix)) {
+        monthDepositAmount += d.amount;
+      }
+    });
+
+    const monthBillAmount = monthMealsCount * mealPrice;
+    const net = monthDepositAmount - monthBillAmount;
+
+    return {
+      activeMembers,
+      monthMeals: monthMealsCount,
+      monthBill: monthBillAmount,
+      monthDeposit: monthDepositAmount,
+      netBalance: net
     };
-
-    fetchStats();
-  }, []);
-
-  const cards = [
-    { label: 'Total Members', value: stats.activeMembers, icon: Users, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-100' },
-    { label: "Today's Meals", value: stats.todayMeals, icon: Utensils, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-100' },
-    { label: "Today's Income", value: `৳${stats.todayIncome}`, icon: TrendingUp, color: 'text-emerald-600', bg: 'bg-emerald-50', border: 'border-emerald-100' },
-    { label: 'Month Income', value: `৳${stats.monthIncome}`, icon: Wallet, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-100' },
-  ];
-
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center h-64 space-y-4">
-      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-red-600"></div>
-      <p className="text-slate-500 font-medium">Loading Overview...</p>
-    </div>
-  );
+  }, [members, allMeals, allDeposits, settings, currentMonthPrefix]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-2">
+    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800">Dashboard</h2>
-          <p className="text-slate-500 text-sm md:text-base">Overview of your mess activity</p>
-        </div>
-        <div className="text-sm font-medium text-red-600 bg-red-50 px-3 py-1 rounded-full w-fit">
-           {format(new Date(), 'EEEE, MMMM do, yyyy')}
+          <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Overview</h2>
+          <div className="mt-1 flex items-center gap-2 text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-bold uppercase tracking-widest">{currentMonthName}</span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-        {cards.map((card, idx) => (
-          <div key={idx} className={`bg-white p-4 md:p-6 rounded-2xl shadow-sm border ${card.border} flex flex-col justify-between h-32 md:h-auto`}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs md:text-sm text-slate-500 font-medium uppercase tracking-wide">{card.label}</p>
-                <h3 className="text-xl md:text-3xl font-bold text-slate-800 mt-1 md:mt-2">{card.value}</h3>
-              </div>
-              <div className={`p-2 md:p-3 rounded-xl ${card.bg}`}>
-                <card.icon className={`h-5 w-5 md:h-6 md:w-6 ${card.color}`} />
-              </div>
+      {/* Main Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        
+        {/* Active Members */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 group hover:shadow-md transition-all">
+            <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                <UsersRound className="h-5 w-5 stroke-[2px]" />
             </div>
-          </div>
-        ))}
+            <div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Members</p>
+                <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{stats.activeMembers}</h3>
+            </div>
+        </div>
+
+        {/* Monthly Meals */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 group hover:shadow-md transition-all">
+            <div className="h-10 w-10 rounded-xl bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-600 dark:text-orange-400 group-hover:scale-110 transition-transform">
+                <UtensilsCrossed className="h-5 w-5 stroke-[2px]" />
+            </div>
+            <div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Total Meals</p>
+                <h3 className="text-2xl font-bold text-slate-800 dark:text-white">{stats.monthMeals}</h3>
+            </div>
+        </div>
+
+        {/* Collected */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 group hover:shadow-md transition-all">
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                <Banknote className="h-5 w-5 stroke-[2px]" />
+            </div>
+            <div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Collected</p>
+                <h3 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">৳{stats.monthDeposit}</h3>
+            </div>
+        </div>
+
+        {/* Total Bill */}
+        <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-3 group hover:shadow-md transition-all">
+            <div className="h-10 w-10 rounded-xl bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center text-violet-600 dark:text-violet-400 group-hover:scale-110 transition-transform">
+                <Receipt className="h-5 w-5 stroke-[2px]" />
+            </div>
+            <div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-0.5">Total Bill</p>
+                <h3 className="text-2xl font-bold text-violet-600 dark:text-violet-400">৳{stats.monthBill}</h3>
+            </div>
+        </div>
+
+        {/* Net Status Banner */}
+        <div className={`col-span-2 lg:col-span-4 p-6 md:p-8 rounded-3xl border shadow-lg flex items-center justify-between relative overflow-hidden transition-all ${stats.netBalance >= 0 ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-500' : 'bg-gradient-to-r from-red-600 to-rose-700 text-white border-red-500'}`}>
+            <div className="relative z-10">
+                <p className="text-[10px] font-bold text-white/80 uppercase tracking-[0.2em] mb-1">Current Standing</p>
+                <h3 className="text-4xl md:text-5xl font-black mb-1">
+                   ৳{Math.abs(stats.netBalance).toLocaleString()}
+                </h3>
+                <p className="text-xs text-white/70 font-medium">
+                    {stats.netBalance >= 0 ? 'Surplus Cash in Hand' : 'Pending Collections Required'}
+                </p>
+            </div>
+            
+            <div className="relative z-10 p-4 bg-white/10 rounded-2xl backdrop-blur-md border border-white/20">
+                {stats.netBalance >= 0 ? (
+                    <Wallet className="h-8 w-8 text-white stroke-[1.5px]" />
+                ) : (
+                    <TrendingDown className="h-8 w-8 text-white stroke-[1.5px]" />
+                )}
+            </div>
+            
+            {/* Background Decoration */}
+            <div className="absolute right-0 top-0 h-32 w-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
+        </div>
       </div>
       
       {/* Quick Actions */}
-      <div className="bg-gradient-to-r from-red-600 to-red-700 p-6 rounded-2xl shadow-lg text-white">
-        <h3 className="text-lg font-bold mb-4">Quick Actions</h3>
-        <div className="flex flex-wrap gap-3">
-           <a href="#/meals" className="flex-1 min-w-[140px] px-4 py-3 bg-white/10 backdrop-blur-sm border border-white/20 text-white rounded-xl hover:bg-white/20 transition flex items-center justify-center gap-2 font-medium">
-             <Utensils className="h-4 w-4" /> Add Meals
-           </a>
-           <a href="#/members" className="flex-1 min-w-[140px] px-4 py-3 bg-white text-red-700 rounded-xl hover:bg-red-50 transition flex items-center justify-center gap-2 font-bold shadow-sm">
-             <Users className="h-4 w-4" /> Add Member
-           </a>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+        <button 
+            onClick={() => window.location.hash = '#/meals'}
+            className="group bg-slate-900 dark:bg-slate-800 p-6 rounded-2xl relative overflow-hidden flex items-center justify-between text-left transition-all active:scale-[0.98] hover:shadow-lg"
+        >
+            <div className="relative z-10">
+              <h3 className="text-xl font-bold text-white mb-1">Meal Entry</h3>
+              <p className="text-slate-400 text-xs">Record daily meals for members</p>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center text-white group-hover:bg-red-600 transition-colors">
+                <UtensilsCrossed className="h-5 w-5" />
+            </div>
+        </button>
+
+        <button 
+            onClick={() => window.location.hash = '#/money'}
+            className="group bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 relative overflow-hidden flex items-center justify-between text-left transition-all active:scale-[0.98] shadow-sm hover:shadow-md"
+        >
+            <div className="relative z-10">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-1">Add Money</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-xs">Record payments and deposits</p>
+            </div>
+            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                <Banknote className="h-5 w-5" />
+            </div>
+        </button>
       </div>
     </div>
   );

@@ -1,22 +1,30 @@
+
 import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Button } from '../components/Button';
-import { Save, Settings as SettingsIcon } from 'lucide-react';
-import { AppSettings } from '../types';
+import { Save, Sliders, Coins, Activity, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { AppSettings, LogEntry } from '../types';
+import { logAction } from '../utils/logger';
+import { format } from 'date-fns';
 
 export const Settings: React.FC = () => {
   const [price, setPrice] = useState<number>(65);
+  const [messName, setMessName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [activeTab, setActiveTab] = useState<'general' | 'logs' | 'data'>('general');
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const docRef = doc(db, 'settings', 'config');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setPrice((docSnap.data() as AppSettings).mealPrice);
+        const docRef = db.collection('settings').doc('config');
+        const docSnap = await docRef.get();
+        if (docSnap.exists) {
+          const data = docSnap.data() as AppSettings;
+          setPrice(data.mealPrice);
+          setMessName(data.messName || 'RiceMgr');
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -27,68 +35,250 @@ export const Settings: React.FC = () => {
     fetchSettings();
   }, []);
 
+  // Fetch logs when switching to logs tab
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      const fetchLogs = async () => {
+        try {
+          const snapshot = await db.collection('logs').orderBy('timestamp', 'desc').limit(50).get();
+          const logData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LogEntry));
+          setLogs(logData);
+        } catch (error) {
+          console.error("Error fetching logs:", error);
+        }
+      };
+      fetchLogs();
+    }
+  }, [activeTab]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setNotification(null);
     try {
-      await setDoc(doc(db, 'settings', 'config'), {
-        mealPrice: Number(price)
-      });
-      alert('Settings updated successfully!');
+      await db.collection('settings').doc('config').set({
+        mealPrice: Number(price),
+        messName: messName
+      }, { merge: true });
+      await logAction('Update Settings', `Updated settings (Price: ${price}, Name: ${messName})`);
+      setNotification({ type: 'success', message: 'Settings updated successfully!' });
+      setTimeout(() => setNotification(null), 3000);
     } catch (error) {
       console.error(error);
-      alert('Failed to update settings.');
+      setNotification({ type: 'error', message: 'Failed to update settings.' });
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <div className="p-8 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div></div>;
+  const exportData = async () => {
+      // Simple export as JSON (can be expanded to CSV)
+      const data = {
+          settings: { mealPrice: price, messName },
+          exportTime: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ricemanager_backup_${format(new Date(), 'yyyy-MM-dd')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+  };
+
+  const handleReset = async () => {
+      if (window.confirm('Are you sure you want to RESET all data? This will NOT delete members but WILL clear logs. (Full reset logic can be expanded)')) {
+          setNotification({ type: 'success', message: 'System Reset requested. (Logic pending implementation)' });
+      }
+  };
+
+  if (loading) return <div className="p-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div></div>;
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-red-50 rounded-xl">
-           <SettingsIcon className="h-6 w-6 text-red-600" />
+    <div className="max-w-3xl mx-auto">
+      <div className="flex items-center gap-4 mb-8">
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl">
+           <Sliders className="h-8 w-8 text-red-600 dark:text-red-400 stroke-[1.5px]" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-800">Settings</h2>
-          <p className="text-slate-500 text-sm">Configure global application parameters</p>
+          <h2 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Settings</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Configure parameters & view system logs</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-lg font-bold text-slate-800 mb-6 border-b border-slate-100 pb-3">Meal Configuration</h3>
-        
-        <form onSubmit={handleSave} className="space-y-6">
-          <div className="grid grid-cols-1 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Meal Price (BDT)</label>
-              <div className="relative">
-                <span className="absolute left-4 top-3.5 text-slate-500 font-bold text-lg">৳</span>
+      {/* Tabs */}
+      <div className="flex gap-2 mb-6 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl w-fit overflow-x-auto no-scrollbar max-w-full">
+        <button 
+          onClick={() => setActiveTab('general')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'general' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          General
+        </button>
+        <button 
+          onClick={() => setActiveTab('data')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'data' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          Data & Security
+        </button>
+        <button 
+          onClick={() => setActiveTab('logs')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'logs' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          System Logs
+        </button>
+      </div>
+
+      {activeTab === 'general' && (
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 animate-in fade-in slide-in-from-bottom-2 relative">
+          
+          {notification && (
+              <div className={`absolute top-0 left-0 right-0 p-4 rounded-t-3xl flex items-center gap-2 text-sm font-bold ${notification.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}`}>
+                  {notification.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                  {notification.message}
+              </div>
+          )}
+
+          <form onSubmit={handleSave} className="space-y-8 mt-2">
+            <div className="space-y-6">
+              {/* Mess Identity */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Mess Name</label>
                 <input
-                  type="number"
-                  min="0"
+                  type="text"
                   required
-                  value={price}
-                  onChange={(e) => setPrice(Number(e.target.value))}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-lg font-medium"
+                  value={messName}
+                  onChange={(e) => setMessName(e.target.value)}
+                  placeholder="Enter Mess Name"
+                  className="w-full px-4 py-3.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none text-lg font-bold text-slate-800 dark:text-white bg-transparent transition-all"
                 />
               </div>
-              <p className="text-sm text-slate-500 mt-2 leading-relaxed">
-                This price will be used to calculate the monthly payable amount for all members. Changing this will affect reports.
-              </p>
-            </div>
-          </div>
 
-          <div className="flex justify-end pt-4">
-            <Button type="submit" isLoading={saving} className="px-8 py-3">
-              <Save className="h-5 w-5" />
-              Save Configuration
-            </Button>
-          </div>
-        </form>
-      </div>
+              {/* Price Config */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2 ml-1">Meal Price (BDT)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-3.5 text-slate-400 dark:text-slate-500 font-bold text-lg">৳</span>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={price}
+                    onChange={(e) => setPrice(Number(e.target.value))}
+                    className="w-full pl-10 pr-4 py-3.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none text-lg font-bold text-slate-800 dark:text-white bg-transparent transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4">
+              <Button type="submit" isLoading={saving} className="px-8 py-3.5 rounded-xl text-base font-bold shadow-lg shadow-red-100 dark:shadow-red-900/20">
+                <Save className="h-5 w-5 stroke-[2px]" />
+                Save Settings
+              </Button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {activeTab === 'data' && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+           <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 p-8">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+                <Save className="h-5 w-5 text-blue-500" /> Backup Data
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Download a copy of your configuration for safekeeping.</p>
+              <button 
+                onClick={exportData}
+                className="w-full md:w-auto bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                Download Backup (JSON)
+              </button>
+           </div>
+
+           <div className="bg-red-50/50 dark:bg-red-900/10 rounded-3xl border border-red-100 dark:border-red-900/40 p-8">
+              <h3 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" /> Danger Zone
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">These actions are destructive and cannot be undone.</p>
+              <button 
+                onClick={handleReset}
+                className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-red-100 dark:shadow-none transition-all active:scale-95"
+              >
+                Reset System Data
+              </button>
+           </div>
+        </div>
+      )}
+
+      {activeTab === 'logs' && (
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden animate-in fade-in slide-in-from-bottom-2">
+           <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                 <Activity className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                 <h3 className="font-bold text-slate-700 dark:text-slate-300">Recent Activity (Last 50)</h3>
+              </div>
+           </div>
+           
+           <div className="max-h-[600px] overflow-y-auto">
+             {logs.length === 0 ? (
+               <div className="p-8 text-center text-slate-400 dark:text-slate-500">No logs found.</div>
+             ) : (
+               <>
+                 {/* Desktop Table View */}
+                 <div className="hidden md:block">
+                    <table className="w-full text-left">
+                      <thead className="bg-white dark:bg-slate-800 sticky top-0 z-10 shadow-sm">
+                        <tr className="text-xs font-bold text-slate-500 dark:text-slate-400 border-b border-slate-100 dark:border-slate-700">
+                          <th className="px-6 py-4 uppercase">Action</th>
+                          <th className="px-6 py-4 uppercase">Details</th>
+                          <th className="px-6 py-4 uppercase">User</th>
+                          <th className="px-6 py-4 uppercase text-right">Time</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
+                        {logs.map((log) => (
+                          <tr key={log.id} className="text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap">{log.action}</td>
+                            <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{log.details}</td>
+                            <td className="px-6 py-4 text-slate-500 dark:text-slate-500 text-xs">{log.performedBy}</td>
+                            <td className="px-6 py-4 text-slate-400 dark:text-slate-500 text-xs text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <Clock className="h-3 w-3" />
+                                {format(new Date(log.timestamp), 'MMM dd, HH:mm')}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                 </div>
+
+                 {/* Mobile Card View */}
+                 <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-700">
+                    {logs.map((log) => (
+                      <div key={log.id} className="p-4 space-y-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                         <div className="flex justify-between items-start">
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{log.action}</span>
+                            <div className="flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-900 px-2 py-0.5 rounded-full border border-slate-100 dark:border-slate-800">
+                               <Clock className="h-2.5 w-2.5" />
+                               {format(new Date(log.timestamp), 'MMM dd, HH:mm')}
+                            </div>
+                         </div>
+                         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{log.details}</p>
+                         <div className="flex items-center gap-1.5 pt-1">
+                            <div className="h-4 w-4 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-[8px] font-bold text-slate-500 dark:text-slate-400">
+                               {log.performedBy?.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 italic">{log.performedBy}</span>
+                         </div>
+                      </div>
+                    ))}
+                 </div>
+               </>
+             )}
+           </div>
+        </div>
+      )}
     </div>
   );
 };

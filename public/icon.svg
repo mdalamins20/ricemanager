@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc2626;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#991b1b;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#grad1)" />
+  <!-- Rice Bowl -->
+  <path d="M128 280c0 88 72 160 160 160s160-72 160-160H128z" fill="#ffffff"/>
+  <path d="M128 280c0 10 2 20 5 30h302c3-10 5-20 5-30H128z" fill="#e2e8f0"/>
+  <!-- Rice Mounds -->
+  <circle cx="200" cy="240" r="40" fill="#f1f5f9"/>
+  <circle cx="256" cy="220" r="45" fill="#ffffff"/>
+  <circle cx="312" cy="240" r="40" fill="#f1f5f9"/>
+  <!-- Chopsticks -->
+  <path d="M420 100L350 280" stroke="#7f1d1d" stroke-width="18" stroke-linecap="round"/>
+  <path d="M460 100L390 280" stroke="#7f1d1d" stroke-width="18" stroke-linecap="round"/>
+</svg>

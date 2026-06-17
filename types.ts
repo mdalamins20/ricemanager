@@ -1,3 +1,4 @@
+
 export interface Member {
   id: string;
   fullName: string;
@@ -10,16 +11,20 @@ export interface Member {
 export interface MealEntry {
   lunch: boolean;
   dinner: boolean;
+  guestLunch?: number;
+  guestDinner?: number;
 }
 
 // Map of memberId -> MealEntry
 export interface DailyMealDoc {
+  id: string;
   date: string; // YYYY-MM-DD
   entries: Record<string, MealEntry>;
 }
 
 export interface AppSettings {
   mealPrice: number;
+  messName?: string;
 }
 
 export interface MonthlySummary {
@@ -29,4 +34,21 @@ export interface MonthlySummary {
   totalDinner: number;
   totalMeals: number;
   payableAmount: number;
+}
+
+export interface Deposit {
+  id: string;
+  memberId: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  note?: string;
+  createdAt: string;
+}
+
+export interface LogEntry {
+  id: string;
+  action: string;
+  details: string;
+  performedBy: string; // Email or 'System'
+  timestamp: string;
 }
