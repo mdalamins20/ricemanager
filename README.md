@@ -1,5 +1,5 @@
 <div align="center">
-  <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+  <img width="1200" height="475" alt="GHBanner" src="https://i.ibb.co.com/3Y1Ljpv1/Chat-GPT-Image-Jun-19-2026-12-53-18-PM.png" />
 
   <h1>🍚 MessMate (Rice Meal Manager)</h1>
   
