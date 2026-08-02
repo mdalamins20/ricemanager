@@ -7,6 +7,7 @@ import { UserPlus, UserCog, Trash2, Phone, MapPin, X, UsersRound, Lock, Calendar
 import { Member, DailyMealDoc, AppSettings, Deposit } from '../types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { logAction } from '../utils/logger';
+import { useData } from '../DataContext';
 
 // --- Sub-component: Member Details Modal ---
 const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ member, onClose }) => {
@@ -22,97 +23,95 @@ const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ memb
   
   const [mealPrice, setMealPrice] = useState(65);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const settingsSnap = await db.collection('settings').doc('config').get();
-        const currentPrice = settingsSnap.exists ? (settingsSnap.data() as AppSettings).mealPrice : 65;
-        setMealPrice(currentPrice);
+  const { allMeals, allDeposits, settings, loading: dataLoading } = useData();
 
-        const mealsSnap = await db.collection('meals').get();
-        const allMeals = mealsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as unknown as DailyMealDoc);
+  const historyData = useMemo(() => {
+    if (dataLoading) return null;
+    const currentPrice = settings?.mealPrice || 65;
 
-        const depositsSnap = await db.collection('deposits').get();
-        const memberDeposits = depositsSnap.docs
-          .map(d => d.data() as Deposit)
-          .filter(d => d.memberId === member.id);
+    const memberDeposits = allDeposits.filter(d => d.memberId === member.id);
 
-        let totalLifetimeMeals = 0;
-        let totalLifetimeDeposit = memberDeposits.reduce((sum, d) => sum + d.amount, 0);
+    let totalLifetimeMeals = 0;
+    let totalLifetimeDeposit = memberDeposits.reduce((sum, d) => sum + d.amount, 0);
 
-        allMeals.forEach(m => {
-          const entry = m.entries[member.id];
-          if (entry) {
-            if (entry.lunch) totalLifetimeMeals++;
-            if (entry.dinner) totalLifetimeMeals++;
-            if (entry.guestLunch) totalLifetimeMeals += entry.guestLunch;
-            if (entry.guestDinner) totalLifetimeMeals += entry.guestDinner;
-          }
-        });
-        
-        const netBalance = totalLifetimeDeposit - (totalLifetimeMeals * currentPrice);
-
-        const [year, month] = selectedMonth.split('-').map(Number);
-        const startDate = startOfMonth(new Date(year, month - 1));
-        const endDate = endOfMonth(new Date(year, month - 1));
-        const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
-
-        let monthMealsCount = 0;
-        let monthDepositAmount = 0;
-
-        memberDeposits.forEach(d => {
-           if (d.date.startsWith(selectedMonth)) {
-             monthDepositAmount += d.amount;
-           }
-        });
-
-        const dailyData = daysInMonth.map(day => {
-          const dateStr = format(day, 'yyyy-MM-dd');
-          const mealDoc = allMeals.find(m => m.date === dateStr);
-          let lunch = false;
-          let dinner = false;
-          let guestLunch = 0;
-          let guestDinner = 0;
-
-          if (mealDoc && mealDoc.entries[member.id]) {
-            const entry = mealDoc.entries[member.id];
-            lunch = entry.lunch;
-            dinner = entry.dinner;
-            guestLunch = entry.guestLunch || 0;
-            guestDinner = entry.guestDinner || 0;
-          }
-
-          const dailyTotal = (lunch ? 1 : 0) + (dinner ? 1 : 0) + guestLunch + guestDinner;
-          monthMealsCount += dailyTotal;
-
-          return {
-            date: day,
-            lunch,
-            dinner,
-            guestLunch,
-            guestDinner,
-            cost: dailyTotal * currentPrice
-          };
-        });
-
-        setHistory({
-          days: dailyData,
-          monthTotalMeals: monthMealsCount,
-          monthTotalCost: monthMealsCount * currentPrice,
-          monthDeposit: monthDepositAmount,
-          netBalance
-        });
-
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+    allMeals.forEach(m => {
+      const entry = m.entries?.[member.id];
+      if (entry) {
+        if (entry.lunch) totalLifetimeMeals++;
+        if (entry.dinner) totalLifetimeMeals++;
+        if (entry.guestLunch) totalLifetimeMeals += entry.guestLunch;
+        if (entry.guestDinner) totalLifetimeMeals += entry.guestDinner;
       }
-    };
+    });
+    
+    const netBalance = totalLifetimeDeposit - (totalLifetimeMeals * currentPrice);
 
-    fetchData();
-  }, [selectedMonth, member.id]);
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const startDate = startOfMonth(new Date(year, month - 1));
+    const endDate = endOfMonth(new Date(year, month - 1));
+    const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
+
+    let monthMealsCount = 0;
+    let monthDepositAmount = 0;
+
+    memberDeposits.forEach(d => {
+       if (d.date.startsWith(selectedMonth)) {
+         monthDepositAmount += d.amount;
+       }
+    });
+
+    const dailyData = daysInMonth.map(day => {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      const mealDoc = allMeals.find(m => m.date === dateStr);
+      let lunch = false;
+      let dinner = false;
+      let guestLunch = 0;
+      let guestDinner = 0;
+
+      if (mealDoc && mealDoc.entries?.[member.id]) {
+        const entry = mealDoc.entries[member.id];
+        lunch = entry.lunch;
+        dinner = entry.dinner;
+        guestLunch = entry.guestLunch || 0;
+        guestDinner = entry.guestDinner || 0;
+      }
+
+      const dailyTotal = (lunch ? 1 : 0) + (dinner ? 1 : 0) + guestLunch + guestDinner;
+      monthMealsCount += dailyTotal;
+
+      return {
+        date: day,
+        lunch,
+        dinner,
+        guestLunch,
+        guestDinner,
+        cost: dailyTotal * currentPrice
+      };
+    });
+
+    return {
+      days: dailyData,
+      monthTotalMeals: monthMealsCount,
+      monthTotalCost: monthMealsCount * currentPrice,
+      monthDeposit: monthDepositAmount,
+      netBalance,
+      mealPrice: currentPrice
+    };
+  }, [selectedMonth, member.id, allMeals, allDeposits, settings, dataLoading]);
+
+  useEffect(() => {
+    if (historyData) {
+      setHistory({
+        days: historyData.days,
+        monthTotalMeals: historyData.monthTotalMeals,
+        monthTotalCost: historyData.monthTotalCost,
+        monthDeposit: historyData.monthDeposit,
+        netBalance: historyData.netBalance
+      });
+      setMealPrice(historyData.mealPrice);
+      setLoading(false);
+    }
+  }, [historyData]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4">
@@ -122,7 +121,7 @@ const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ memb
         {/* Header */}
         <div className="p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-3xl">
           <div className="flex items-center gap-3">
-             <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400 flex items-center justify-center text-lg font-bold">
+             <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg font-bold">
                 {member.fullName.charAt(0)}
              </div>
              <div>
@@ -148,7 +147,7 @@ const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ memb
                     className="outline-none text-slate-800 dark:text-white font-bold bg-transparent text-sm cursor-pointer"
                   />
                 </div>
-                <div className={`px-3 py-1 rounded-lg font-bold text-sm ${history.netBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+                <div className={`px-3 py-1 rounded-lg font-bold text-sm ${history.netBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'}`}>
                    Net: {history.netBalance >= 0 ? '+' : ''}{history.netBalance} ৳
                 </div>
              </div>
@@ -159,9 +158,9 @@ const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ memb
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-1">Total Meals</p>
                   <div className="text-xl font-bold text-orange-700 dark:text-orange-400">{history.monthTotalMeals}</div>
                 </div>
-                <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-xl border border-red-100 dark:border-red-900/40">
-                   <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider mb-1">Cost</p>
-                   <div className="text-xl font-bold text-red-700 dark:text-red-400">৳{history.monthTotalCost}</div>
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
+                   <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Cost</p>
+                   <div className="text-xl font-bold text-indigo-700 dark:text-indigo-400">৳{history.monthTotalCost}</div>
                 </div>
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-900/40">
                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Deposit</p>
@@ -214,7 +213,7 @@ const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ memb
 
 // --- Main Members Component ---
 export const Members: React.FC = () => {
-  const [members, setMembers] = useState<Member[]>([]);
+  const { members, allMeals, allDeposits, settings, loading: dataLoading } = useData();
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
@@ -236,12 +235,12 @@ export const Members: React.FC = () => {
 
   useEffect(() => {
     const authUnsub = auth.onAuthStateChanged((currentUser) => setUser(currentUser));
-    const dataUnsub = db.collection('members').orderBy('fullName').onSnapshot((snapshot) => {
-      setMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member)));
-      setLoading(false);
-    });
-    return () => { authUnsub(); dataUnsub(); };
+    return () => { authUnsub(); };
   }, []);
+
+  useEffect(() => {
+    setLoading(dataLoading);
+  }, [dataLoading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -291,21 +290,16 @@ export const Members: React.FC = () => {
 
     // --- DEBT CHECK START ---
     try {
-      // 1. Get current meal price
-      const settingsSnap = await db.collection('settings').doc('config').get();
-      const currentPrice = settingsSnap.exists ? (settingsSnap.data() as AppSettings).mealPrice : 65;
+      const currentPrice = settings?.mealPrice || 65;
 
       // 2. Calculate Total Deposits
-      const depositsSnap = await db.collection('deposits').where('memberId', '==', member.id).get();
-      let totalDeposit = 0;
-      depositsSnap.forEach(d => totalDeposit += (d.data() as Deposit).amount);
+      const memberDeposits = allDeposits.filter(d => d.memberId === member.id);
+      let totalDeposit = memberDeposits.reduce((sum, d) => sum + d.amount, 0);
 
       // 3. Calculate Total Meals
-      const mealsSnap = await db.collection('meals').get();
       let totalMeals = 0;
-      mealsSnap.forEach(mDoc => {
-        const data = mDoc.data() as DailyMealDoc;
-        const entry = data.entries[member.id];
+      allMeals.forEach(mDoc => {
+        const entry = mDoc.entries?.[member.id];
         if (entry) {
           if (entry.lunch) totalMeals++;
           if (entry.dinner) totalMeals++;
@@ -360,11 +354,11 @@ export const Members: React.FC = () => {
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Members</h2>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">
-               Manage your <span className="text-red-500 font-bold">{members.length}</span> active members
+               Manage your <span className="text-indigo-500 font-bold">{members.length}</span> active members
             </p>
           </div>
           {user && (
-            <Button onClick={() => openModal()} className="shadow-lg shadow-red-200 dark:shadow-red-900/20 rounded-2xl px-6 py-2.5">
+            <Button onClick={() => openModal()} className="shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20 rounded-2xl px-6 py-2.5">
               <UserPlus className="h-5 w-5 stroke-[2px]" />
               Add New
             </Button>
@@ -373,7 +367,7 @@ export const Members: React.FC = () => {
 
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="h-12 w-12 border-4 border-red-500/20 border-t-red-500 rounded-full animate-spin"></div>
+              <div className="h-12 w-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
               <p className="text-slate-400 font-bold text-sm uppercase tracking-widest">Loading members...</p>
           </div>
         ) : (
@@ -396,7 +390,7 @@ export const Members: React.FC = () => {
                       )}
                     </div>
                     <div>
-                      <h3 className="text-lg font-bold text-slate-800 dark:text-white group-hover:text-red-600 transition-colors">{member.fullName}</h3>
+                      <h3 className="text-lg font-bold text-slate-800 dark:text-white group-hover:text-indigo-600 transition-colors">{member.fullName}</h3>
                       <p className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5 mt-0.5">
                          <Phone className="h-3 w-3" /> {member.phone}
                       </p>
@@ -405,7 +399,7 @@ export const Members: React.FC = () => {
                   
                   <button 
                      onClick={() => setViewMember(member)}
-                     className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/30 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 rounded-xl transition-all shadow-sm"
+                     className="p-2.5 bg-slate-50 dark:bg-slate-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-xl transition-all shadow-sm"
                      title="View History"
                   >
                      <ChevronRight className="h-5 w-5" />
@@ -435,7 +429,7 @@ export const Members: React.FC = () => {
                         </button>
                         <button 
                           onClick={(e) => initiateDelete(member, e)}
-                          className="p-2 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
+                          className="p-2 text-indigo-500 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl transition-colors"
                           title="Delete Member"
                         >
                            <Trash2 className="h-5 w-5" />
@@ -463,23 +457,23 @@ export const Members: React.FC = () => {
             
             {/* IN-APP VALIDATION ERROR MESSAGE */}
             {formError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded-xl p-4 mb-4 flex gap-3 items-start animate-in fade-in slide-in-from-top-1">
-                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                    <div className="text-sm text-red-700 dark:text-red-400 font-medium">
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-900/40 rounded-xl p-4 mb-4 flex gap-3 items-start animate-in fade-in slide-in-from-top-1">
+                    <AlertTriangle className="h-5 w-5 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-indigo-700 dark:text-indigo-400 font-medium">
                         {formError}
                     </div>
                 </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input type="text" required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 outline-none transition-all dark:text-white" placeholder="Full Name" />
-              <input type="tel" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 outline-none transition-all dark:text-white" placeholder="Phone" />
-              <input type="text" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 outline-none transition-all dark:text-white" placeholder="Address (Optional)" />
-              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-red-500/20 outline-none transition-all dark:text-white">
+              <input type="text" required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all dark:text-white" placeholder="Full Name" />
+              <input type="tel" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all dark:text-white" placeholder="Phone" />
+              <input type="text" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all dark:text-white" placeholder="Address (Optional)" />
+              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all dark:text-white">
                  <option value="active">Active</option>
                  <option value="inactive">Inactive</option>
               </select>
-              <Button type="submit" className="w-full py-3.5 shadow-lg shadow-red-200 dark:shadow-red-900/20">Save</Button>
+              <Button type="submit" className="w-full py-3.5 shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20">Save</Button>
             </form>
           </div>
         </div>
@@ -491,7 +485,7 @@ export const Members: React.FC = () => {
             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDeleteModal({ isOpen: false, member: null, loading: false })} />
             <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-sm relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
                 <div className="flex flex-col items-center text-center gap-4">
-                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${deleteModal.error ? 'bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400' : 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+                    <div className={`h-12 w-12 rounded-full flex items-center justify-center ${deleteModal.error ? 'bg-amber-100 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400' : 'bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'}`}>
                         <AlertTriangle className="h-6 w-6" />
                     </div>
                     <div>
@@ -519,7 +513,7 @@ export const Members: React.FC = () => {
                                 <Button variant="secondary" onClick={() => setDeleteModal({ isOpen: false, member: null, loading: false })} className="flex-1 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700" disabled={deleteModal.loading}>
                                     Cancel
                                 </Button>
-                                <Button variant="primary" onClick={proceedWithDelete} isLoading={deleteModal.loading} className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 dark:shadow-red-900/20">
+                                <Button variant="primary" onClick={proceedWithDelete} isLoading={deleteModal.loading} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20">
                                     Delete
                                 </Button>
                             </>

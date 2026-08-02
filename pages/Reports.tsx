@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import firebase from 'firebase/compat/app';
 import { db } from '../firebase';
 import { format } from 'date-fns';
 import { Banknote, Calendar, ChevronDown, Download, MessageCircle } from 'lucide-react';
-import { Member, DailyMealDoc, AppSettings, Deposit } from '../types';
+import { AppSettings, Deposit, DailyMealDoc, Member } from '../types';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { useData } from '../DataContext';
 
 interface DailyLog {
   date: string;
@@ -20,7 +21,8 @@ interface MemberReport {
   memberName: string;
   phone: string;
   prevBalance: number;
-  currentDeposit: number;
+  advanceDeposit: number;
+  finalDeposit: number;
   remainingDeposit: number;
   totalMeals: number;
   totalCost: number;
@@ -30,89 +32,83 @@ interface MemberReport {
 
 export const Reports: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
-  const [reportData, setReportData] = useState<MemberReport[]>([]);
-  const [loading, setLoading] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const { members, allMeals, allDeposits, settings, loading } = useData();
 
-  useEffect(() => {
-    const fetchFullReport = async () => {
-      setLoading(true);
-      try {
-        const settingsSnap = await db.collection('settings').doc('config').get();
-        const currentPrice = settingsSnap.exists ? (settingsSnap.data() as AppSettings).mealPrice : 65;
-        const membersSnap = await db.collection('members').orderBy('fullName').get();
-        const membersList = membersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Member));
-        const mealsSnap = await db.collection('meals').get();
-        const allMeals = mealsSnap.docs.map(d => ({ id: d.id, ...d.data() }) as unknown as DailyMealDoc);
-        const depositsSnap = await db.collection('deposits').get();
-        const allDeposits = depositsSnap.docs.map(d => d.data() as Deposit);
+  const reportData = useMemo(() => {
+    if (loading) return [];
+    
+    const currentPrice = settings?.mealPrice || 65;
+    const membersList = [...members].sort((a, b) => a.fullName.localeCompare(b.fullName));
 
-        const report: MemberReport[] = membersList.map(member => {
-          const startStr = format(new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]) - 1, 1), 'yyyy-MM-dd');
-          
-          let prevTotalDeposit = 0, prevTotalMeals = 0;
-          allDeposits.forEach(d => { if (d.memberId === member.id && d.date < startStr) prevTotalDeposit += d.amount; });
-          allMeals.forEach(mDoc => {
-             if (mDoc.date < startStr) {
-                const entry = mDoc.entries[member.id];
-                if (entry) { 
-                  if (entry.lunch) prevTotalMeals++; 
-                  if (entry.dinner) prevTotalMeals++; 
-                  if (entry.guestLunch) prevTotalMeals += entry.guestLunch;
-                  if (entry.guestDinner) prevTotalMeals += entry.guestDinner;
-                }
-             }
-          });
-          const prevBalance = prevTotalDeposit - (prevTotalMeals * currentPrice);
+    return membersList.map(member => {
+      const startStr = format(new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]) - 1, 1), 'yyyy-MM-dd');
+      
+      let prevTotalDeposit = 0, prevTotalMeals = 0;
+      allDeposits.forEach(d => { if (d.memberId === member.id && d.date < startStr) prevTotalDeposit += d.amount; });
+      allMeals.forEach(mDoc => {
+         if (mDoc.date < startStr) {
+            const entry = mDoc.entries?.[member.id];
+            if (entry) { 
+              if (entry.lunch) prevTotalMeals++; 
+              if (entry.dinner) prevTotalMeals++; 
+              if (entry.guestLunch) prevTotalMeals += entry.guestLunch;
+              if (entry.guestDinner) prevTotalMeals += entry.guestDinner;
+            }
+         }
+      });
+      const prevBalance = prevTotalDeposit - (prevTotalMeals * currentPrice);
 
-          let currentMonthDeposit = 0, currentMonthMeals = 0;
-          const dailyLogs: DailyLog[] = [];
+      let advanceDeposit = 0, finalDeposit = 0, currentMonthMeals = 0;
+      const dailyLogs: DailyLog[] = [];
 
-          allDeposits.forEach(d => { if (d.memberId === member.id && d.date.startsWith(selectedMonth)) currentMonthDeposit += d.amount; });
-          
-          const sortedMeals = [...allMeals].sort((a, b) => a.date.localeCompare(b.date));
-          
-          sortedMeals.forEach(mDoc => {
-             if (mDoc.date.startsWith(selectedMonth)) {
-                const entry = mDoc.entries[member.id];
-                if (entry) { 
-                  const mealsInDoc = (entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0) + (entry.guestLunch || 0) + (entry.guestDinner || 0);
-                  currentMonthMeals += mealsInDoc;
-                  
-                  dailyLogs.push({
-                      date: mDoc.date,
-                      lunch: entry.lunch,
-                      dinner: entry.dinner,
-                      guestLunch: entry.guestLunch || 0,
-                      guestDinner: entry.guestDinner || 0
-                  });
-                }
-             }
-          });
+      allDeposits.forEach(d => { 
+          if (d.memberId === member.id && d.date.startsWith(selectedMonth)) {
+              if (d.type === 'final') finalDeposit += d.amount;
+              else advanceDeposit += d.amount;
+          } 
+      });
+      
+      const sortedMeals = [...allMeals].sort((a, b) => a.date.localeCompare(b.date));
+      
+      sortedMeals.forEach(mDoc => {
+         if (mDoc.date.startsWith(selectedMonth)) {
+            const entry = mDoc.entries?.[member.id];
+            if (entry) { 
+              const mealsInDoc = (entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0) + (entry.guestLunch || 0) + (entry.guestDinner || 0);
+              currentMonthMeals += mealsInDoc;
+              
+              dailyLogs.push({
+                  date: mDoc.date,
+                  lunch: entry.lunch,
+                  dinner: entry.dinner,
+                  guestLunch: entry.guestLunch || 0,
+                  guestDinner: entry.guestDinner || 0
+              });
+            }
+         }
+      });
 
-          const remainingDeposit = prevBalance + currentMonthDeposit;
-          const totalCost = currentMonthMeals * currentPrice;
-          const currentBalance = remainingDeposit - totalCost;
+      const remainingDeposit = prevBalance + advanceDeposit + finalDeposit;
+      const totalCost = currentMonthMeals * currentPrice;
+      const currentBalance = remainingDeposit - totalCost;
 
-          return { 
-              memberId: member.id, 
-              memberName: member.fullName, 
-              phone: member.phone || '',
-              prevBalance, 
-              currentDeposit: currentMonthDeposit, 
-              remainingDeposit, 
-              totalMeals: currentMonthMeals, 
-              totalCost, 
-              currentBalance,
-              dailyLogs
-          };
-        });
-        setReportData(report);
-      } catch (err) { console.error(err); } finally { setLoading(false); }
-    };
-    fetchFullReport();
-  }, [selectedMonth]);
+      return { 
+          memberId: member.id, 
+          memberName: member.fullName, 
+          phone: member.phone || '',
+          prevBalance, 
+          advanceDeposit,
+          finalDeposit,
+          remainingDeposit, 
+          totalMeals: currentMonthMeals, 
+          totalCost, 
+          currentBalance,
+          dailyLogs
+      };
+    });
+  }, [selectedMonth, members, allMeals, allDeposits, settings, loading]);
 
   const generatePDF = (item: MemberReport) => {
     const doc = new jsPDF({
@@ -149,7 +145,8 @@ export const Reports: React.FC = () => {
       head: [['Financial Summary', 'Amount (BDT)']],
       body: [
         ['Previous Balance (Brought Forward)', `${item.prevBalance >= 0 ? '+' : ''}${item.prevBalance}`],
-        ['Total Deposit (This Month)', `+${item.currentDeposit}`],
+        ['Advance Deposit', `+${item.advanceDeposit}`],
+        ['Final Settlement', `+${item.finalDeposit}`],
         ['Total Available Funds', `${item.remainingDeposit}`],
         [`Total Meals Consumed (${item.totalMeals})`, `-${item.totalCost}`],
       ],
@@ -250,11 +247,12 @@ export const Reports: React.FC = () => {
   };
 
   const exportCSV = () => {
-    const headers = ['Member Name', 'Prev. Balance', 'Monthly Deposit', 'Total Available', 'Total Meals', 'Total Cost', 'Current Balance'];
+    const headers = ['Member Name', 'Prev. Balance', 'Advance', 'Final Settlement', 'Total Available', 'Total Meals', 'Total Cost', 'Current Balance'];
     const rows = reportData.map(item => [
       item.memberName,
       item.prevBalance,
-      item.currentDeposit,
+      item.advanceDeposit,
+      item.finalDeposit,
       item.remainingDeposit,
       item.totalMeals,
       item.totalCost,
@@ -273,6 +271,10 @@ export const Reports: React.FC = () => {
   };
 
   const grandTotalBalance = reportData.reduce((acc, curr) => acc + curr.currentBalance, 0);
+  const grandTotalMeals = reportData.reduce((acc, curr) => acc + curr.totalMeals, 0);
+  const grandTotalAdvance = reportData.reduce((acc, curr) => acc + curr.advanceDeposit, 0);
+  const grandTotalFinal = reportData.reduce((acc, curr) => acc + curr.finalDeposit, 0);
+  const grandTotalCost = reportData.reduce((acc, curr) => acc + curr.totalCost, 0);
 
   return (
     <div className="space-y-6">
@@ -289,14 +291,44 @@ export const Reports: React.FC = () => {
           </div>
        </div>
 
-       <div className="bg-slate-800 dark:bg-slate-900 text-white p-6 rounded-3xl relative overflow-hidden shadow-lg border border-slate-700 dark:border-slate-800">
-           <div className="relative z-10">
-               <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Net Balance ({format(new Date(selectedMonth), 'MMM')})</p>
-               <div className={`text-3xl font-bold ${grandTotalBalance >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-               {grandTotalBalance >= 0 ? '+' : ''}৳{grandTotalBalance.toLocaleString()}
+       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+           <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+               <div className="relative z-10">
+                   <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Total Meals</p>
+                   <div className="text-2xl font-bold text-slate-800 dark:text-white">{grandTotalMeals}</div>
                </div>
            </div>
-           <Banknote className="absolute right-4 top-4 h-24 w-24 text-white opacity-5" />
+           
+           <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+               <div className="relative z-10">
+                   <p className="text-amber-500 dark:text-amber-400 text-xs font-bold uppercase tracking-wider mb-1">Advance</p>
+                   <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">৳{grandTotalAdvance.toLocaleString()}</div>
+               </div>
+           </div>
+
+           <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+               <div className="relative z-10">
+                   <p className="text-blue-500 dark:text-blue-400 text-xs font-bold uppercase tracking-wider mb-1">Final Settled</p>
+                   <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">৳{grandTotalFinal.toLocaleString()}</div>
+               </div>
+           </div>
+
+           <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
+               <div className="relative z-10">
+                   <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Total Bill</p>
+                   <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">৳{grandTotalCost.toLocaleString()}</div>
+               </div>
+           </div>
+
+           <div className="bg-slate-800 dark:bg-slate-900 text-white p-5 rounded-2xl border border-slate-700 dark:border-slate-800 shadow-sm relative overflow-hidden">
+               <div className="relative z-10">
+                   <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Net Balance</p>
+                   <div className={`text-2xl font-bold ${grandTotalBalance >= 0 ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                   {grandTotalBalance >= 0 ? '+' : ''}৳{grandTotalBalance.toLocaleString()}
+                   </div>
+               </div>
+               <Banknote className="absolute right-4 top-4 h-16 w-16 text-white opacity-5" />
+           </div>
        </div>
 
        {/* Desktop Table */}
@@ -306,7 +338,8 @@ export const Reports: React.FC = () => {
                    <tr>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase">Name</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Prev. Bal</th>
-                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Deposit</th>
+                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Advance</th>
+                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Final</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Total Avail</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Meals</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Cost</th>
@@ -319,14 +352,15 @@ export const Reports: React.FC = () => {
                    {reportData.map((item) => (
                        <tr key={item.memberId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 text-sm transition-colors">
                            <td className="px-4 py-3 font-bold dark:text-slate-200">{item.memberName}</td>
-                           <td className={`px-4 py-3 text-center font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{item.prevBalance}</td>
-                           <td className="px-4 py-3 text-center dark:text-slate-300">{item.currentDeposit}</td>
+                           <td className={`px-4 py-3 text-center font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{item.prevBalance}</td>
+                           <td className="px-4 py-3 text-center dark:text-slate-300">{item.advanceDeposit}</td>
+                           <td className="px-4 py-3 text-center dark:text-slate-300">{item.finalDeposit}</td>
                            <td className="px-4 py-3 text-center font-bold text-blue-600 dark:text-blue-400">{item.remainingDeposit}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalMeals}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalCost}</td>
-                           <td className={`px-4 py-3 text-right font-bold ${item.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{item.currentBalance}</td>
+                           <td className={`px-4 py-3 text-right font-bold ${item.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{item.currentBalance}</td>
                            <td className="px-4 py-3 text-center">
-                               <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors">
+                               <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-full transition-colors">
                                    <Download className="h-4 w-4" />
                                </button>
                            </td>
@@ -353,7 +387,7 @@ export const Reports: React.FC = () => {
               <div key={item.memberId} className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700" onClick={() => setExpandedCard(isExpanded ? null : item.memberId)}>
                  <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-slate-800 dark:text-white text-lg">{item.memberName}</h3>
-                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${item.currentBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'}`}>
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${item.currentBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'}`}>
                         {item.currentBalance} ৳
                     </div>
                  </div>
@@ -365,7 +399,7 @@ export const Reports: React.FC = () => {
                      </div>
                      <div className="flex flex-col items-end">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Total Bill</span>
-                        <strong className="text-red-600 dark:text-red-400 text-lg">{item.totalCost} ৳</strong>
+                        <strong className="text-indigo-600 dark:text-indigo-400 text-lg">{item.totalCost} ৳</strong>
                      </div>
                  </div>
 
@@ -386,11 +420,15 @@ export const Reports: React.FC = () => {
                     <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-y-4 text-sm animate-in slide-in-from-top-2 fade-in">
                        <div className="flex flex-col">
                           <span className="text-[10px] uppercase font-bold text-slate-400">Prev. Balance</span>
-                          <span className={`font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{item.prevBalance} ৳</span>
+                          <span className={`font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{item.prevBalance} ৳</span>
+                       </div>
+                       <div className="flex flex-col">
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Advance</span>
+                          <span className="font-bold text-amber-600 dark:text-amber-400">{item.advanceDeposit} ৳</span>
                        </div>
                        <div className="flex flex-col items-end">
-                          <span className="text-[10px] uppercase font-bold text-slate-400">Deposit</span>
-                          <span className="font-bold text-blue-600 dark:text-blue-400">{item.currentDeposit} ৳</span>
+                          <span className="text-[10px] uppercase font-bold text-slate-400">Final Settled</span>
+                          <span className="font-bold text-blue-600 dark:text-blue-400">{item.finalDeposit} ৳</span>
                        </div>
                        <div className="flex flex-col">
                           <span className="text-[10px] uppercase font-bold text-slate-400">Total Available</span>

@@ -2,15 +2,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { db, auth } from '../firebase';
 import firebase from 'firebase/compat/app';
-import { format } from 'date-fns';
+import { format, subDays, addDays } from 'date-fns';
 import { Button } from '../components/Button';
-import { CalendarDays, Save, MoonStar, SunMedium, Lock, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { CalendarDays, Save, MoonStar, SunMedium, Lock, CheckCircle2, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Member, DailyMealDoc, AppSettings } from '../types';
 import { logAction } from '../utils/logger';
+import { useData } from '../DataContext';
 
 export const MealEntry: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [members, setMembers] = useState<Member[]>([]);
   const [entries, setEntries] = useState<Record<string, { lunch: boolean; dinner: boolean; guestLunch?: number; guestDinner?: number }>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -27,39 +27,62 @@ export const MealEntry: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const mSnap = await db.collection('members').where('status', '==', 'active').get();
-      const activeMembers = mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Member));
-      setMembers(activeMembers);
+  const { members: allMembers, allMeals, settings, loading: dataLoading } = useData();
+  const [activeMembers, setActiveMembers] = useState<Member[]>([]);
 
-      const mealDoc = await db.collection('meals').doc(selectedDate).get();
-      
+  useEffect(() => {
+    setActiveMembers(allMembers.filter(m => m.status === 'active'));
+  }, [allMembers]);
+
+  const fetchData = useCallback(async () => {
+    if (dataLoading) return;
+    setLoading(true);
+    
+    try {
+      const mealDoc = allMeals.find(m => m.date === selectedDate);
       const currentEntries: Record<string, { lunch: boolean; dinner: boolean; guestLunch?: number; guestDinner?: number }> = {};
       
-      if (mealDoc.exists) {
-        const data = mealDoc.data() as DailyMealDoc;
+      if (mealDoc) {
         activeMembers.forEach(m => {
-          currentEntries[m.id] = data.entries[m.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
+          currentEntries[m.id] = mealDoc.entries?.[m.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
         });
       } else {
-        activeMembers.forEach(m => {
-          currentEntries[m.id] = { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
-        });
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        
+        if (selectedDate >= todayStr) {
+            // Auto-populate for today and future dates
+            activeMembers.forEach(m => {
+              const defaultMeals = m.defaultMeals || { lunch: true, dinner: true };
+              currentEntries[m.id] = { lunch: defaultMeals.lunch, dinner: defaultMeals.dinner, guestLunch: 0, guestDinner: 0 };
+            });
+            
+            // Auto-save this initial configuration to the database if the user is authenticated
+            const currentUser = auth.currentUser;
+            if (currentUser && activeMembers.length > 0) {
+                try {
+                    await db.collection('meals').doc(selectedDate).set({
+                        date: selectedDate,
+                        entries: currentEntries
+                    }, { merge: true });
+                } catch (saveErr) {
+                    console.error("Auto-init save error:", saveErr);
+                }
+            }
+        } else {
+            // For past dates that don't exist in DB, just show 0 meals (no auto-population)
+            activeMembers.forEach(m => {
+              currentEntries[m.id] = { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
+            });
+        }
       }
       setEntries(currentEntries);
-
-      const settingsSnap = await db.collection('settings').doc('config').get();
-      if(settingsSnap.exists) {
-          setPrice((settingsSnap.data() as AppSettings).mealPrice);
-      }
+      setPrice(settings?.mealPrice || 65);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [selectedDate]);
+  }, [selectedDate, dataLoading, allMeals, activeMembers, settings]);
 
   useEffect(() => {
     fetchData();
@@ -139,6 +162,16 @@ export const MealEntry: React.FC = () => {
     }
   };
 
+  const handlePrevDay = () => {
+    const prev = subDays(new Date(selectedDate), 1);
+    setSelectedDate(format(prev, 'yyyy-MM-dd'));
+  };
+
+  const handleNextDay = () => {
+    const next = addDays(new Date(selectedDate), 1);
+    setSelectedDate(format(next, 'yyyy-MM-dd'));
+  };
+
   const totalLunch = Object.values(entries).reduce((acc, curr) => acc + (curr.lunch ? 1 : 0) + (curr.guestLunch || 0), 0);
   const totalDinner = Object.values(entries).reduce((acc, curr) => acc + (curr.dinner ? 1 : 0) + (curr.guestDinner || 0), 0);
   const totalMeals = totalLunch + totalDinner;
@@ -171,7 +204,7 @@ export const MealEntry: React.FC = () => {
         <button 
         onClick={onClick}
         disabled={disabled}
-        className={`w-full flex flex-col items-center justify-center gap-1 p-2 sm:p-3 rounded-2xl border transition-all duration-200 
+        className={`w-full flex flex-col items-center justify-center gap-1 p-1.5 sm:p-2 rounded-xl border transition-all duration-200 
             ${active 
             ? `${colorClass} border-transparent shadow-md` 
             : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-500'}
@@ -179,8 +212,8 @@ export const MealEntry: React.FC = () => {
             ${disabled && 'opacity-90 cursor-default'}
             `}
         >
-        <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${active ? 'fill-current stroke-[2px]' : 'stroke-[1.5px]'}`} />
-        <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">{label}</span>
+        <Icon className={`h-4 w-4 sm:h-5 sm:w-5 ${active ? 'fill-current stroke-[2px]' : 'stroke-[1.5px]'}`} />
+        <span className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">{label}</span>
         </button>
         <GuestSelector count={guestCount || 0} onChange={onGuestChange} disabled={disabled} />
     </div>
@@ -197,28 +230,44 @@ export const MealEntry: React.FC = () => {
           <p className="text-slate-500 dark:text-slate-400 mt-1">Mark meals for {format(new Date(selectedDate), 'MMMM do, yyyy')}</p>
         </div>
         
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-2 pl-4 rounded-xl border border-red-100 dark:border-red-900/40 shadow-sm w-full md:w-auto ring-4 ring-red-50 dark:ring-red-900/10">
-          <CalendarDays className="h-5 w-5 text-red-500 dark:text-red-400" />
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="outline-none text-slate-800 dark:text-white font-bold bg-transparent flex-1 text-lg uppercase cursor-pointer"
-          />
+        <div className="flex items-center gap-2">
+          <button onClick={handlePrevDay} className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+            <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+          </button>
+          <div className="flex items-center gap-2 sm:gap-3 bg-white dark:bg-slate-800 p-2 px-2 sm:px-4 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm w-full md:w-auto ring-4 ring-indigo-50 dark:ring-indigo-900/10">
+            <CalendarDays className="h-5 w-5 text-indigo-500 dark:text-indigo-400 hidden sm:block" />
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="outline-none text-slate-800 dark:text-white font-bold bg-transparent flex-1 text-sm sm:text-lg uppercase cursor-pointer text-center"
+            />
+          </div>
+          <button onClick={handleNextDay} className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+            <ChevronRight className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+          </button>
         </div>
       </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {members.map(member => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
+        {activeMembers.map((member: Member) => {
                 const entry = entries[member.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
                 return (
                     <div key={member.id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col justify-between hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-center mb-4">
                              <div className="flex items-center gap-3">
-                               <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-500 dark:text-slate-400">
+                               <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-500 dark:text-slate-400 shrink-0">
                                   {member.fullName.charAt(0)}
                                </div>
-                               <span className="font-bold text-slate-800 dark:text-white text-lg">{member.fullName}</span>
+                               <div className="flex flex-col">
+                                   <span className="font-bold text-slate-800 dark:text-white text-lg leading-tight">{member.fullName}</span>
+                                   <div className="flex items-center gap-1 mt-0.5 opacity-80" title="Auto Meal Settings">
+                                      <span className="text-[9px] uppercase font-bold text-slate-500 dark:text-slate-400">Auto:</span>
+                                      {(member.defaultMeals?.lunch ?? true) && <SunMedium className="h-3 w-3 text-amber-500" />}
+                                      {(member.defaultMeals?.dinner ?? true) && <MoonStar className="h-3 w-3 text-indigo-500" />}
+                                      {!(member.defaultMeals?.lunch ?? true) && !(member.defaultMeals?.dinner ?? true) && <span className="text-[9px] font-bold text-slate-400">None</span>}
+                                   </div>
+                               </div>
                              </div>
                              <div className="bg-slate-50 dark:bg-slate-900/50 text-slate-600 dark:text-slate-400 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-800">
                                  Total: {(entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0) + (entry.guestLunch || 0) + (entry.guestDinner || 0)}
@@ -232,7 +281,7 @@ export const MealEntry: React.FC = () => {
                                 icon={SunMedium}
                                 label="Lunch"
                                 disabled={!user}
-                                colorClass="bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-amber-200 dark:shadow-none"
+                                colorClass="bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-200/50 dark:shadow-orange-900/20 border-orange-400/20"
                                 guestCount={entry.guestLunch}
                                 onGuestChange={(count: number) => updateGuest(member.id, 'guestLunch', count)}
                             />
@@ -242,7 +291,7 @@ export const MealEntry: React.FC = () => {
                                 icon={MoonStar}
                                 label="Dinner"
                                 disabled={!user}
-                                colorClass="bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-indigo-200 dark:shadow-none"
+                                colorClass="bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/20 border-indigo-400/20"
                                 guestCount={entry.guestDinner}
                                 onGuestChange={(count: number) => updateGuest(member.id, 'guestDinner', count)}
                             />
@@ -270,15 +319,15 @@ export const MealEntry: React.FC = () => {
               </div>
               <div className="flex flex-col items-center px-2">
                   <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Cost</span>
-                  <span className="text-base md:text-xl font-bold text-red-600 dark:text-red-500">৳{totalCost}</span>
+                  <span className="text-base md:text-xl font-bold text-indigo-600 dark:text-indigo-500">৳{totalCost}</span>
               </div>
           </div>
       </div>
 
       {/* Custom Toast Notification */}
       {toast.show && (
-         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top-4 fade-in duration-300 ${toast.type === 'success' ? 'bg-white border-emerald-100 text-emerald-800' : 'bg-white border-red-100 text-red-800'}`}>
-            <div className={`p-2 rounded-full ${toast.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top-4 fade-in duration-300 ${toast.type === 'success' ? 'bg-white border-emerald-100 text-emerald-800' : 'bg-white border-indigo-100 text-indigo-800'}`}>
+            <div className={`p-2 rounded-full ${toast.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
                {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
             </div>
             <div>

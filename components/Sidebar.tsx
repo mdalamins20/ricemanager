@@ -50,11 +50,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
           href="https://mdalamins20.netlify.app/" 
           target="_blank" 
           rel="noopener noreferrer"
-          className="text-2xl font-bold text-red-600 flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
+          className="text-2xl font-bold text-indigo-600 flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
           title="Visit Developer Website"
         >
-          <div className="bg-red-50 dark:bg-red-900/20 p-2 rounded-lg group-hover:bg-red-100 dark:group-hover:bg-red-900/40 transition-colors">
-            <ChefHat className="h-6 w-6 stroke-[2.5px]" />
+          <div className="bg-transparent p-0 rounded-lg transition-colors">
+            <img src="/logo.png" alt="Logo" className="h-10 w-10 object-contain" />
           </div>
           <span className="tracking-tight">{messName}</span>
         </a>
@@ -68,7 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
             className={({ isActive }) => `
               group flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200
               ${isActive 
-                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 shadow-sm ring-1 ring-red-100 dark:ring-red-900/40' 
+                ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900/40' 
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'}
             `}
           >
@@ -87,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
             className={({ isActive }) => `
               group flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-medium transition-all duration-200
               ${isActive 
-                ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 shadow-sm ring-1 ring-red-100 dark:ring-red-900/40' 
+                ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400 shadow-sm ring-1 ring-indigo-100 dark:ring-indigo-900/40' 
                 : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200'}
             `}
           >
@@ -124,7 +124,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
         {user ? (
           <button 
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 w-full rounded-xl transition-all group"
+            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 dark:hover:text-indigo-400 w-full rounded-xl transition-all group"
           >
             <LogOut className="h-5 w-5 group-hover:translate-x-1 transition-transform stroke-[1.5px]" />
             Sign Out
@@ -132,7 +132,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
         ) : (
           <button 
             onClick={handleLogin}
-            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white bg-red-600 hover:bg-red-700 w-full rounded-xl transition-all shadow-md shadow-red-200 dark:shadow-red-900/20"
+            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 w-full rounded-xl transition-all shadow-md shadow-indigo-200 dark:shadow-indigo-900/20"
           >
             <LogIn className="h-5 w-5 stroke-[2px]" />
             Log In
@@ -153,7 +153,7 @@ export const BottomNav: React.FC = () => {
             to={item.path}
             className={({ isActive }) => `
               flex flex-col items-center justify-center w-full h-full gap-1
-              ${isActive ? 'text-red-600 dark:text-red-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}
+              ${isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}
             `}
           >
             {({ isActive }) => (

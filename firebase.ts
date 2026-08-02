@@ -4,13 +4,13 @@ import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAs8CT69dImMCYDeOtYx9kMQQwgLqqQN7g",
-  authDomain: "ricemanager-a4cd4.firebaseapp.com",
-  projectId: "ricemanager-a4cd4",
-  storageBucket: "ricemanager-a4cd4.firebasestorage.app",
-  messagingSenderId: "992728767702",
-  appId: "1:992728767702:web:39526fa98602b8623c3d77",
-  measurementId: "G-GHFL8NXR6Z"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Initialize Firebase (v8 style)

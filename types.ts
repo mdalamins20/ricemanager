@@ -6,6 +6,7 @@ export interface Member {
   address?: string;
   joinDate: string;
   status: 'active' | 'inactive';
+  defaultMeals?: { lunch: boolean; dinner: boolean };
 }
 
 export interface MealEntry {
@@ -42,6 +43,7 @@ export interface Deposit {
   amount: number;
   date: string; // YYYY-MM-DD
   note?: string;
+  type?: 'advance' | 'final';
   createdAt: string;
 }
 

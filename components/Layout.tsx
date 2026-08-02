@@ -48,22 +48,22 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     return (
       <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col items-center justify-center p-6 text-white overflow-hidden">
         {/* Animated Background Circles */}
-        <div className="absolute top-0 left-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -ml-48 -mt-48 animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl -mr-48 -mb-48 animate-pulse delay-1000"></div>
+        <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -ml-48 -mt-48 animate-pulse"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -mr-48 -mb-48 animate-pulse delay-1000"></div>
 
         <div className="relative z-10 flex flex-col items-center gap-8 animate-in fade-in zoom-in duration-1000">
           {/* Logo Container */}
           <div className="relative">
-             <div className="h-24 w-24 bg-red-600 rounded-[2rem] flex items-center justify-center shadow-2xl shadow-red-600/40 animate-bounce transition-all duration-1000">
-                <ChefHat className="h-12 w-12 text-white stroke-[2px]" />
+             <div className="h-24 w-24 bg-transparent flex items-center justify-center shadow-2xl shadow-indigo-600/40 animate-bounce transition-all duration-1000 rounded-[2rem] overflow-hidden">
+                <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
              </div>
              {/* Ring Animation */}
-             <div className="absolute -inset-4 border border-red-500/30 rounded-[2.5rem] animate-ping opacity-20"></div>
+             <div className="absolute -inset-4 border border-indigo-500/30 rounded-[2.5rem] animate-ping opacity-20"></div>
           </div>
 
           <div className="text-center space-y-2">
             <h1 className="text-4xl font-black tracking-tighter uppercase">
-              Rice<span className="text-red-500">Manager</span>
+              Rice<span className="text-indigo-500">Manager</span>
             </h1>
             <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] opacity-80">
               Advanced Mess Management System
@@ -72,7 +72,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
           {/* Sleek Loading Bar */}
           <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden mt-4">
-             <div className="h-full bg-red-600 w-1/2 rounded-full animate-[loading_2s_infinite_ease-in-out]"></div>
+             <div className="h-full bg-indigo-600 w-1/2 rounded-full animate-[loading_2s_infinite_ease-in-out]"></div>
           </div>
         </div>
 
@@ -108,10 +108,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                rel="noopener noreferrer"
                className="flex items-center gap-2 hover:opacity-80 transition-opacity"
              >
-               <div className="bg-red-50 dark:bg-red-900/20 p-1.5 rounded-lg text-red-600">
-                  <ChefHat className="h-5 w-5 stroke-[2.5px]" />
+               <div className="bg-transparent p-0 rounded-lg">
+                  <img src="/logo.png" alt="Logo" className="h-8 w-8 object-contain" />
                </div>
-               <span className="font-bold text-xl text-red-600 tracking-tight">{messName}</span>
+               <span className="font-bold text-xl text-indigo-600 tracking-tight">{messName}</span>
              </a>
              
              <div className="flex items-center gap-2">
@@ -131,7 +131,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                      </button>
                   </>
                 ) : (
-                  <button onClick={() => navigate('/login')} className="p-2 text-red-600 bg-red-50 dark:bg-red-900/20 rounded-full">
+                  <button onClick={() => navigate('/login')} className="p-2 text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 rounded-full">
                       <LogIn className="h-5 w-5" />
                   </button>
                 )}

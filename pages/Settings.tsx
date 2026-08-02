@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { db } from '../firebase';
 import { Button } from '../components/Button';
 import { Save, Sliders, Coins, Activity, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { AppSettings, LogEntry } from '../types';
+import { AppSettings, LogEntry, Member } from '../types';
 import { logAction } from '../utils/logger';
 import { format } from 'date-fns';
 
@@ -13,7 +13,8 @@ export const Settings: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [activeTab, setActiveTab] = useState<'general' | 'logs' | 'data'>('general');
+  const [members, setMembers] = useState<Member[]>([]);
+  const [activeTab, setActiveTab] = useState<'general' | 'logs' | 'data' | 'auto_meals'>('general');
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   useEffect(() => {
@@ -48,6 +49,18 @@ export const Settings: React.FC = () => {
         }
       };
       fetchLogs();
+    } else if (activeTab === 'auto_meals') {
+      const fetchMembers = async () => {
+        try {
+          const snapshot = await db.collection('members').where('status', '==', 'active').get();
+          let mems = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Member));
+          mems.sort((a, b) => a.fullName.localeCompare(b.fullName));
+          setMembers(mems);
+        } catch (error) {
+          console.error("Error fetching members:", error);
+        }
+      };
+      fetchMembers();
     }
   }, [activeTab]);
 
@@ -86,19 +99,49 @@ export const Settings: React.FC = () => {
       URL.revokeObjectURL(url);
   };
 
+  const toggleAutoMeal = (memberId: string, type: 'lunch' | 'dinner') => {
+      setMembers(prev => prev.map(m => {
+          if (m.id === memberId) {
+              const currentDefault = m.defaultMeals || { lunch: true, dinner: true };
+              return { ...m, defaultMeals: { ...currentDefault, [type]: !currentDefault[type] } };
+          }
+          return m;
+      }));
+  };
+
+  const saveAutoMeals = async () => {
+      setSaving(true);
+      try {
+          const batch = db.batch();
+          members.forEach(m => {
+              const ref = db.collection('members').doc(m.id);
+              batch.update(ref, { defaultMeals: m.defaultMeals || { lunch: true, dinner: true } });
+          });
+          await batch.commit();
+          await logAction('Settings', 'Updated auto meal preferences');
+          setNotification({ type: 'success', message: 'Auto meal settings saved successfully!' });
+          setTimeout(() => setNotification(null), 3000);
+      } catch (err) {
+          console.error(err);
+          setNotification({ type: 'error', message: 'Failed to save auto meal settings.' });
+      } finally {
+          setSaving(false);
+      }
+  };
+
   const handleReset = async () => {
       if (window.confirm('Are you sure you want to RESET all data? This will NOT delete members but WILL clear logs. (Full reset logic can be expanded)')) {
           setNotification({ type: 'success', message: 'System Reset requested. (Logic pending implementation)' });
       }
   };
 
-  if (loading) return <div className="p-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600"></div></div>;
+  if (loading) return <div className="p-12 flex justify-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>;
 
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-4 mb-8">
-        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-2xl">
-           <Sliders className="h-8 w-8 text-red-600 dark:text-red-400 stroke-[1.5px]" />
+        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl">
+           <Sliders className="h-8 w-8 text-indigo-600 dark:text-indigo-400 stroke-[1.5px]" />
         </div>
         <div>
           <h2 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Settings</h2>
@@ -126,13 +169,19 @@ export const Settings: React.FC = () => {
         >
           System Logs
         </button>
+        <button 
+          onClick={() => setActiveTab('auto_meals')}
+          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap ${activeTab === 'auto_meals' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+        >
+          Auto Meals
+        </button>
       </div>
 
       {activeTab === 'general' && (
         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 animate-in fade-in slide-in-from-bottom-2 relative">
           
           {notification && (
-              <div className={`absolute top-0 left-0 right-0 p-4 rounded-t-3xl flex items-center gap-2 text-sm font-bold ${notification.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'}`}>
+              <div className={`absolute top-0 left-0 right-0 p-4 rounded-t-3xl flex items-center gap-2 text-sm font-bold ${notification.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400'}`}>
                   {notification.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
                   {notification.message}
               </div>
@@ -149,7 +198,7 @@ export const Settings: React.FC = () => {
                   value={messName}
                   onChange={(e) => setMessName(e.target.value)}
                   placeholder="Enter Mess Name"
-                  className="w-full px-4 py-3.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none text-lg font-bold text-slate-800 dark:text-white bg-transparent transition-all"
+                  className="w-full px-4 py-3.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-lg font-bold text-slate-800 dark:text-white bg-transparent transition-all"
                 />
               </div>
 
@@ -164,14 +213,14 @@ export const Settings: React.FC = () => {
                     required
                     value={price}
                     onChange={(e) => setPrice(Number(e.target.value))}
-                    className="w-full pl-10 pr-4 py-3.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none text-lg font-bold text-slate-800 dark:text-white bg-transparent transition-all"
+                    className="w-full pl-10 pr-4 py-3.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-lg font-bold text-slate-800 dark:text-white bg-transparent transition-all"
                   />
                 </div>
               </div>
             </div>
 
             <div className="flex justify-end pt-4">
-              <Button type="submit" isLoading={saving} className="px-8 py-3.5 rounded-xl text-base font-bold shadow-lg shadow-red-100 dark:shadow-red-900/20">
+              <Button type="submit" isLoading={saving} className="px-8 py-3.5 rounded-xl text-base font-bold shadow-lg shadow-indigo-100 dark:shadow-indigo-900/20">
                 <Save className="h-5 w-5 stroke-[2px]" />
                 Save Settings
               </Button>
@@ -195,14 +244,14 @@ export const Settings: React.FC = () => {
               </button>
            </div>
 
-           <div className="bg-red-50/50 dark:bg-red-900/10 rounded-3xl border border-red-100 dark:border-red-900/40 p-8">
-              <h3 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
+           <div className="bg-indigo-50/50 dark:bg-indigo-900/10 rounded-3xl border border-indigo-100 dark:border-indigo-900/40 p-8">
+              <h3 className="text-xl font-bold text-indigo-600 dark:text-indigo-400 mb-2 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5" /> Danger Zone
               </h3>
               <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">These actions are destructive and cannot be undone.</p>
               <button 
                 onClick={handleReset}
-                className="w-full md:w-auto bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-red-100 dark:shadow-none transition-all active:scale-95"
+                className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-indigo-100 dark:shadow-none transition-all active:scale-95"
               >
                 Reset System Data
               </button>
@@ -279,6 +328,53 @@ export const Settings: React.FC = () => {
            </div>
         </div>
       )}
+
+      {activeTab === 'auto_meals' && (
+         <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 p-8 animate-in fade-in slide-in-from-bottom-2 relative">
+           {notification && (
+              <div className={`absolute top-0 left-0 right-0 p-4 rounded-t-3xl flex items-center gap-2 text-sm font-bold ${notification.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400'}`}>
+                  {notification.type === 'success' ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                  {notification.message}
+              </div>
+           )}
+
+           <div className="mb-6 mt-2">
+              <h3 className="text-xl font-bold text-slate-800 dark:text-white">Default Auto Meals</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm">Configure which meals are automatically selected when opening a new day.</p>
+           </div>
+
+           <div className="space-y-3 mb-8 max-h-[500px] overflow-y-auto pr-2">
+              {members.map(member => {
+                  const defaultMeals = member.defaultMeals || { lunch: true, dinner: true };
+                  return (
+                      <div key={member.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+                          <span className="font-bold text-slate-800 dark:text-slate-200">{member.fullName}</span>
+                          <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => toggleAutoMeal(member.id, 'lunch')}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${defaultMeals.lunch ? 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800' : 'bg-white text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}
+                              >
+                                {defaultMeals.lunch ? 'Lunch (ON)' : 'Lunch (OFF)'}
+                              </button>
+                              <button 
+                                onClick={() => toggleAutoMeal(member.id, 'dinner')}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${defaultMeals.dinner ? 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800' : 'bg-white text-slate-400 border-slate-200 dark:bg-slate-800 dark:border-slate-700'}`}
+                              >
+                                {defaultMeals.dinner ? 'Dinner (ON)' : 'Dinner (OFF)'}
+                              </button>
+                          </div>
+                      </div>
+                  );
+              })}
+           </div>
+           <div className="flex justify-end pt-4 border-t border-slate-100 dark:border-slate-700">
+              <Button onClick={saveAutoMeals} isLoading={saving} className="px-8 py-3.5 rounded-xl text-base font-bold shadow-lg shadow-emerald-100 dark:shadow-emerald-900/20 bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Save className="h-5 w-5 stroke-[2px]" />
+                Save Auto Meals
+              </Button>
+           </div>
+         </div>
+       )}
     </div>
   );
 };

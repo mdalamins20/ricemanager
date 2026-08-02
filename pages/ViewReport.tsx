@@ -66,8 +66,8 @@ export const ViewReport: React.FC = () => {
     if (error) {
         return (
             <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center space-y-4">
-                <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-full">
-                    <AlertCircle className="h-12 w-12 text-red-500" />
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-full">
+                    <AlertCircle className="h-12 w-12 text-indigo-500" />
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Oops!</h2>
                 <p className="text-slate-500 dark:text-slate-400 max-w-xs">{error}</p>

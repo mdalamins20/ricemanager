@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import firebase from 'firebase/compat/app';
 import { Button } from '../components/Button';
@@ -7,11 +7,9 @@ import { WalletCards, Plus, Trash2, Calendar, User as UserIcon, Lock, ArrowDownL
 import { Member, Deposit } from '../types';
 import { format } from 'date-fns';
 import { logAction } from '../utils/logger';
+import { useData } from '../DataContext';
 
 export const Money: React.FC = () => {
-  const [members, setMembers] = useState<Member[]>([]);
-  const [deposits, setDeposits] = useState<(Deposit & { memberName: string })[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [user, setUser] = useState<firebase.User | null>(null);
   
@@ -24,44 +22,87 @@ export const Money: React.FC = () => {
   const [formData, setFormData] = useState({
     memberId: '',
     amount: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
+    targetMonth: format(new Date(), 'yyyy-MM'),
+    type: 'advance' as 'advance' | 'final',
     note: ''
   });
 
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+
+  const { members, allMeals, allDeposits, settings, loading: dataLoading } = useData();
+
+  const selectedMemberStats = useMemo(() => {
+      if (!formData.memberId) return null;
+      const price = settings?.mealPrice || 65;
+      
+      let totalMeals = 0;
+      allMeals.forEach(mDoc => {
+          const entry = mDoc.entries?.[formData.memberId];
+          if (entry) {
+              if (entry.lunch) totalMeals++;
+              if (entry.dinner) totalMeals++;
+              if (entry.guestLunch) totalMeals += entry.guestLunch;
+              if (entry.guestDinner) totalMeals += entry.guestDinner;
+          }
+      });
+
+      let totalDeposit = 0;
+      allDeposits.forEach(d => {
+          if (d.memberId === formData.memberId) {
+              totalDeposit += d.amount;
+          }
+      });
+
+      const totalBill = totalMeals * price;
+      const netBalance = totalDeposit - totalBill;
+
+      return {
+          totalMeals,
+          totalDeposit,
+          totalBill,
+          netBalance
+      };
+  }, [formData.memberId, allMeals, allDeposits, settings]);
+
+  const deposits = useMemo(() => {
+    return allDeposits
+      .map(d => {
+        const member = members.find(m => m.id === d.memberId);
+        return { ...d, memberName: member ? member.fullName : 'Unknown' };
+      })
+      .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
+  }, [allDeposits, members]);
+
   useEffect(() => {
     const authUnsub = auth.onAuthStateChanged((currentUser) => setUser(currentUser));
-    const fetchData = async () => {
-      const mSnap = await db.collection('members').where('status', '==', 'active').get();
-      const membersList = mSnap.docs.map(d => ({ id: d.id, ...d.data() } as Member));
-      setMembers(membersList);
-      if (membersList.length > 0 && !formData.memberId) setFormData(prev => ({ ...prev, memberId: membersList[0].id }));
-
-      const unsubscribe = db.collection('deposits').orderBy('date', 'desc').onSnapshot((snapshot) => {
-        const depositList = snapshot.docs.map(doc => {
-          const data = doc.data() as Deposit;
-          const member = membersList.find(m => m.id === data.memberId);
-          return { ...data, id: doc.id, memberName: member ? member.fullName : 'Unknown' };
-        });
-        setDeposits(depositList);
-        setLoading(false);
-      });
-      return unsubscribe;
-    };
-    const dataUnsubPromise = fetchData();
-    return () => { authUnsub(); dataUnsubPromise.then(unsub => unsub && unsub()); };
+    return () => authUnsub();
   }, []);
+
+  useEffect(() => {
+    if (!dataLoading && members.length > 0 && !formData.memberId) {
+      const activeMembers = members.filter(m => m.status === 'active');
+      if (activeMembers.length > 0) {
+        setFormData(prev => ({ ...prev, memberId: activeMembers[0].id }));
+      }
+    }
+  }, [dataLoading, members, formData.memberId]);
+
+  const activeMembersList = useMemo(() => members.filter(m => m.status === 'active'), [members]);
+  
+  // Combine loading states
+  const loading = dataLoading;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !formData.memberId || !formData.amount) return;
     try {
       await db.collection('deposits').add({
-        memberId: formData.memberId, amount: Number(formData.amount), date: formData.date, note: formData.note, createdAt: new Date().toISOString()
+        memberId: formData.memberId, amount: Number(formData.amount), date: `${formData.targetMonth}-01`, note: formData.note, type: formData.type, createdAt: new Date().toISOString()
       });
       const memberName = members.find(m => m.id === formData.memberId)?.fullName || 'Unknown';
-      await logAction('Add Deposit', `Added ${formData.amount} BDT for ${memberName}`);
+      await logAction('Add Deposit', `Added ${formData.amount} BDT (${formData.type}) for ${memberName}`);
       
-      setIsModalOpen(false); setFormData(prev => ({ ...prev, amount: '', note: '' }));
+      setIsModalOpen(false); setFormData(prev => ({ ...prev, amount: '', note: '', type: 'advance' }));
     } catch (error) { console.error(error); }
   };
 
@@ -81,15 +122,23 @@ export const Money: React.FC = () => {
     }
   };
 
+  const filteredDeposits = deposits.filter(deposit => deposit.date.startsWith(selectedMonth));
+
   return (
     <div className="space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">Deposits</h2>
-        {user && (
-          <Button onClick={() => setIsModalOpen(true)} className="shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-sm">
-            <Plus className="h-4 w-4 stroke-[2px]" /> Add
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+           <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+              <Calendar className="h-4 w-4 text-slate-400" />
+              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-white w-24 md:w-auto" />
+           </div>
+          {user && (
+            <Button onClick={() => setIsModalOpen(true)} className="shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-sm">
+              <Plus className="h-4 w-4 stroke-[2px]" /> Add
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="md:bg-white md:dark:bg-slate-800 md:rounded-2xl md:shadow-sm md:border md:border-slate-200 md:dark:border-slate-700 md:overflow-hidden">
@@ -97,7 +146,7 @@ export const Money: React.FC = () => {
           <table className="hidden md:table w-full text-left">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
               <tr>
-                <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-xs uppercase">Date</th>
+                <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-xs uppercase">Month / Paid On</th>
                 <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-xs uppercase">Member</th>
                 <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-xs uppercase">Amount</th>
                 <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-xs uppercase">Note</th>
@@ -105,41 +154,69 @@ export const Money: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {deposits.map(deposit => (
-                <tr key={deposit.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{format(new Date(deposit.date), 'dd MMM, yyyy')}</td>
-                  <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{deposit.memberName}</td>
-                  <td className="px-6 py-4 text-emerald-600 dark:text-emerald-400 font-bold">+৳{deposit.amount}</td>
-                  <td className="px-6 py-4 text-slate-500 dark:text-slate-500">{deposit.note}</td>
-                  <td className="px-6 py-4 text-right">{user && <button onClick={() => initiateDelete(deposit)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"><Trash2 className="h-4 w-4 text-slate-400 dark:text-slate-600 hover:text-red-600 dark:hover:text-red-400" /></button>}</td>
+              {filteredDeposits.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
+                    No deposits found for this month.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                filteredDeposits.map(deposit => (
+                  <tr key={deposit.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                    <td className="px-6 py-4">
+                        <div className="font-bold text-slate-800 dark:text-slate-200">{format(new Date(deposit.date), 'MMM yyyy')}</div>
+                        <div className="text-[10px] text-slate-500 uppercase font-bold mt-0.5">Paid: {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</div>
+                    </td>
+                    <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{deposit.memberName}</td>
+                    <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">+৳{deposit.amount}</span>
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${(!deposit.type || deposit.type === 'advance') ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                {(!deposit.type || deposit.type === 'advance') ? 'Advance' : 'Final'}
+                            </span>
+                        </div>
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 dark:text-slate-500">{deposit.note}</td>
+                    <td className="px-6 py-4 text-right">{user && <button onClick={() => initiateDelete(deposit)} className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-full transition-colors"><Trash2 className="h-4 w-4 text-slate-400 dark:text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400" /></button>}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
 
           {/* Mobile List View */}
           <div className="md:hidden flex flex-col gap-3">
-             {deposits.map(deposit => (
-               <div key={deposit.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between active:scale-[0.98] transition-transform">
-                  <div className="flex items-center gap-3">
-                     <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                        <ArrowDownLeft className="h-5 w-5" />
-                     </div>
-                     <div>
-                        <h4 className="font-bold text-slate-800 dark:text-white text-sm">{deposit.memberName}</h4>
-                        <p className="text-xs text-slate-400 dark:text-slate-500">{format(new Date(deposit.date), 'dd MMM')} • {deposit.note || 'Deposit'}</p>
-                     </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                     <span className="font-bold text-emerald-600 dark:text-emerald-400 text-base">+৳{deposit.amount}</span>
-                     {user && (
-                       <button onClick={() => initiateDelete(deposit)} className="p-2 bg-slate-50 dark:bg-slate-700 rounded-lg text-slate-300 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
-                       </button>
-                     )}
-                  </div>
-               </div>
-             ))}
+             {filteredDeposits.length === 0 ? (
+                <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 dark:text-slate-400">
+                    No deposits found for this month.
+                </div>
+             ) : (
+               filteredDeposits.map(deposit => (
+                 <div key={deposit.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3">
+                       <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                          <ArrowDownLeft className="h-5 w-5" />
+                       </div>
+                       <div>
+                          <h4 className="font-bold text-slate-800 dark:text-white text-sm">{deposit.memberName}</h4>
+                          <p className="text-xs text-slate-400 dark:text-slate-500">For {format(new Date(deposit.date), 'MMM yyyy')} • Paid {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</p>
+                          {deposit.note && <p className="text-[10px] text-slate-500 mt-0.5">{deposit.note}</p>}
+                       </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                       <span className="font-bold text-emerald-600 dark:text-emerald-400 text-base">+৳{deposit.amount}</span>
+                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mb-1 ${(!deposit.type || deposit.type === 'advance') ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                           {(!deposit.type || deposit.type === 'advance') ? 'Advance' : 'Final'}
+                       </span>
+                       {user && (
+                         <button onClick={() => initiateDelete(deposit)} className="p-2 bg-slate-50 dark:bg-slate-700 rounded-lg text-slate-300 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors">
+                            <Trash2 className="h-3.5 w-3.5" />
+                         </button>
+                       )}
+                    </div>
+                 </div>
+               ))
+             )}
            </div>
         </div>
 
@@ -158,8 +235,39 @@ export const Money: React.FC = () => {
                <select value={formData.memberId} onChange={e => setFormData({...formData, memberId: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white">
                  {members.map(m => <option key={m.id} value={m.id}>{m.fullName}</option>)}
                </select>
+
+               {selectedMemberStats && (
+                   <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-xl text-sm border border-slate-200 dark:border-slate-700">
+                       <div className="flex justify-between mb-1.5">
+                           <span className="text-slate-500 dark:text-slate-400">Total Deposit</span>
+                           <span className="font-bold text-slate-700 dark:text-slate-300">৳{selectedMemberStats.totalDeposit}</span>
+                       </div>
+                       <div className="flex justify-between mb-2">
+                           <span className="text-slate-500 dark:text-slate-400">Total Bill ({selectedMemberStats.totalMeals} Meals)</span>
+                           <span className="font-bold text-slate-700 dark:text-slate-300">৳{selectedMemberStats.totalBill}</span>
+                       </div>
+                       <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2 mt-1">
+                           <span className="text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider self-center">Current Balance</span>
+                           <span className={`font-black text-lg ${selectedMemberStats.netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                               {selectedMemberStats.netBalance >= 0 ? '+' : ''}৳{selectedMemberStats.netBalance}
+                           </span>
+                       </div>
+                   </div>
+               )}
                <input type="number" required placeholder="Amount" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white" />
-               <input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white" />
+               <div className="grid grid-cols-2 gap-3">
+                   <div className="flex flex-col">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Deposit For Month</label>
+                      <input type="month" required value={formData.targetMonth} onChange={e => setFormData({...formData, targetMonth: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white" />
+                   </div>
+                   <div className="flex flex-col">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Deposit Type</label>
+                      <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as 'advance'|'final'})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white">
+                          <option value="advance">Advance</option>
+                          <option value="final">Final Settlement</option>
+                      </select>
+                   </div>
+               </div>
                <input type="text" placeholder="Note (Optional)" value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white" />
                <Button type="submit" className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20">Save</Button>
              </form>
@@ -171,9 +279,9 @@ export const Money: React.FC = () => {
       {deleteModal.isOpen && deleteModal.deposit && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDeleteModal({ isOpen: false, deposit: null })} />
-            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-sm relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-sm relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
                 <div className="flex flex-col items-center text-center gap-4">
-                    <div className="h-12 w-12 rounded-full flex items-center justify-center bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400">
+                    <div className="h-12 w-12 rounded-full flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
                         <AlertTriangle className="h-6 w-6" />
                     </div>
                     <div>
@@ -187,7 +295,7 @@ export const Money: React.FC = () => {
                         <Button variant="secondary" onClick={() => setDeleteModal({ isOpen: false, deposit: null })} className="flex-1 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={confirmDelete} className="flex-1 bg-red-600 hover:bg-red-700 text-white shadow-lg shadow-red-200 dark:shadow-red-900/20">
+                        <Button variant="primary" onClick={confirmDelete} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20">
                             Delete
                         </Button>
                     </div>
