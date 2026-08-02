@@ -98,10 +98,10 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     <div className="h-screen overflow-hidden flex font-inter bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       {!isLoginPage && <Sidebar isDark={isDark} toggleTheme={toggleTheme} />}
       
-      <main className={`flex-1 ${!isLoginPage ? 'md:ml-64' : ''} h-full flex flex-col relative overflow-y-auto`}>
+      <main className={`flex-1 ${!isLoginPage ? 'md:ml-64' : ''} h-full flex flex-col relative overflow-hidden`}>
         {/* Mobile Header */}
         {!isLoginPage && (
-          <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3 flex items-center justify-between md:hidden sticky top-0 z-40">
+          <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3 flex items-center justify-between md:hidden z-40 shrink-0">
              <a 
                href="https://mdalamins20.netlify.app/" 
                target="_blank" 
@@ -139,7 +139,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         )}
 
-        <div className={`${isLoginPage ? 'h-full flex items-center justify-center' : 'p-4 md:p-8 max-w-7xl mx-auto w-full flex-1 pb-24 md:pb-8'}`}>
+        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-4 md:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
           {children}
         </div>
 

@@ -46,9 +46,9 @@ export const Dashboard: React.FC = () => {
   }, [members, allMeals, allDeposits, settings, currentMonthPrefix]);
 
   return (
-    <div className="space-y-6 md:space-y-8 animate-in fade-in duration-700">
+    <div className="h-full flex flex-col animate-in fade-in duration-700">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex-none flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
         <div>
           <h2 className="text-3xl md:text-4xl font-black text-slate-800 dark:text-white tracking-tight">Overview</h2>
           <div className="mt-1 flex items-center gap-2 text-slate-500 dark:text-slate-400">
@@ -61,6 +61,8 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 md:space-y-8 pb-10">
       {/* Hero Banner (Net Status) */}
       <div className={`relative overflow-hidden rounded-3xl p-8 md:p-10 shadow-2xl transition-all ${stats.netBalance >= 0 ? 'bg-gradient-to-br from-emerald-500 via-teal-600 to-emerald-900' : 'bg-gradient-to-br from-rose-500 via-red-600 to-rose-900'}`}>
          {/* Glassmorphism overlays & blobs */}
@@ -187,6 +189,7 @@ export const Dashboard: React.FC = () => {
                 <Banknote className="h-7 w-7" />
             </div>
         </button>
+      </div>
       </div>
     </div>
   );

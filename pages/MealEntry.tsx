@@ -220,8 +220,8 @@ export const MealEntry: React.FC = () => {
   );
 
   return (
-    <div className="pb-48 md:pb-24 relative">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 md:mb-8 sticky top-[60px] md:static z-20 bg-slate-50 dark:bg-[#0f172a] py-2 md:py-0">
+    <div className="h-full flex flex-col relative">
+      <div className="flex-none flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
         <div>
           <h2 className="text-3xl font-bold text-slate-800 dark:text-white tracking-tight flex items-center gap-3">
             Daily Meal Entry
@@ -249,6 +249,7 @@ export const MealEntry: React.FC = () => {
         </div>
       </div>
 
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-32 md:pb-10 space-y-4 md:space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 mb-8">
         {activeMembers.map((member: Member) => {
                 const entry = entries[member.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
@@ -336,6 +337,7 @@ export const MealEntry: React.FC = () => {
             </div>
          </div>
       )}
+      </div>
     </div>
   );
 };

@@ -277,8 +277,8 @@ export const Reports: React.FC = () => {
   const grandTotalCost = reportData.reduce((acc, curr) => acc + curr.totalCost, 0);
 
   return (
-    <div className="space-y-6">
-       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="h-full flex flex-col animate-in fade-in duration-500">
+       <div className="flex-none flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
           <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">Monthly Report</h2>
           <div className="flex items-center gap-2">
              <button onClick={exportCSV} className="flex items-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-sm text-sm font-bold transition-all">
@@ -291,6 +291,7 @@ export const Reports: React.FC = () => {
           </div>
        </div>
 
+       <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-10">
        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
                <div className="relative z-10">
@@ -323,7 +324,7 @@ export const Reports: React.FC = () => {
            <div className="bg-slate-800 dark:bg-slate-900 text-white p-5 rounded-2xl border border-slate-700 dark:border-slate-800 shadow-sm relative overflow-hidden">
                <div className="relative z-10">
                    <p className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Net Balance</p>
-                   <div className={`text-2xl font-bold ${grandTotalBalance >= 0 ? 'text-emerald-400' : 'text-indigo-400'}`}>
+                   <div className={`text-2xl font-bold ${grandTotalBalance >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
                    {grandTotalBalance >= 0 ? '+' : ''}৳{grandTotalBalance.toLocaleString()}
                    </div>
                </div>
@@ -352,13 +353,13 @@ export const Reports: React.FC = () => {
                    {reportData.map((item) => (
                        <tr key={item.memberId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 text-sm transition-colors">
                            <td className="px-4 py-3 font-bold dark:text-slate-200">{item.memberName}</td>
-                           <td className={`px-4 py-3 text-center font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{item.prevBalance}</td>
+                           <td className={`px-4 py-3 text-center font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.prevBalance}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.advanceDeposit}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.finalDeposit}</td>
                            <td className="px-4 py-3 text-center font-bold text-blue-600 dark:text-blue-400">{item.remainingDeposit}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalMeals}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalCost}</td>
-                           <td className={`px-4 py-3 text-right font-bold ${item.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{item.currentBalance}</td>
+                           <td className={`px-4 py-3 text-right font-bold ${item.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.currentBalance}</td>
                            <td className="px-4 py-3 text-center">
                                <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-full transition-colors">
                                    <Download className="h-4 w-4" />
@@ -387,7 +388,7 @@ export const Reports: React.FC = () => {
               <div key={item.memberId} className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700" onClick={() => setExpandedCard(isExpanded ? null : item.memberId)}>
                  <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-slate-800 dark:text-white text-lg">{item.memberName}</h3>
-                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${item.currentBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'}`}>
+                    <div className={`px-3 py-1 rounded-full text-xs font-bold ${item.currentBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'}`}>
                         {item.currentBalance} ৳
                     </div>
                  </div>
@@ -420,7 +421,7 @@ export const Reports: React.FC = () => {
                     <div className="mt-5 pt-5 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-y-4 text-sm animate-in slide-in-from-top-2 fade-in">
                        <div className="flex flex-col">
                           <span className="text-[10px] uppercase font-bold text-slate-400">Prev. Balance</span>
-                          <span className={`font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{item.prevBalance} ৳</span>
+                          <span className={`font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.prevBalance} ৳</span>
                        </div>
                        <div className="flex flex-col">
                           <span className="text-[10px] uppercase font-bold text-slate-400">Advance</span>
@@ -442,6 +443,7 @@ export const Reports: React.FC = () => {
               </div>
             )
           })}
+       </div>
        </div>
     </div>
   );

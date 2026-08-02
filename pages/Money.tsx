@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import firebase from 'firebase/compat/app';
 import { Button } from '../components/Button';
-import { WalletCards, Plus, Trash2, Calendar, User as UserIcon, Lock, ArrowDownLeft, AlertTriangle, X } from 'lucide-react';
+import { WalletCards, Plus, Trash2, Calendar, User as UserIcon, Lock, ArrowDownLeft, AlertTriangle, X, Banknote, UsersRound } from 'lucide-react';
 import { Member, Deposit } from '../types';
 import { format } from 'date-fns';
 import { logAction } from '../utils/logger';
@@ -124,24 +124,93 @@ export const Money: React.FC = () => {
 
   const filteredDeposits = deposits.filter(deposit => deposit.date.startsWith(selectedMonth));
 
+  const monthTotal = filteredDeposits.reduce((acc: any, curr: any) => acc + curr.amount, 0);
+  const monthAdvance = filteredDeposits.filter((d: any) => !d.type || d.type === 'advance').reduce((acc: any, curr: any) => acc + curr.amount, 0);
+  const monthFinal = filteredDeposits.filter((d: any) => d.type === 'final').reduce((acc: any, curr: any) => acc + curr.amount, 0);
+  const uniqueMembersPaid = new Set(filteredDeposits.map((d: any) => d.memberId)).size;
+
   return (
-    <div className="space-y-4 md:space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white">Deposits</h2>
-        <div className="flex items-center gap-2">
-           <div className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-              <Calendar className="h-4 w-4 text-slate-400" />
-              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-white w-24 md:w-auto" />
+    <div className="h-full flex flex-col animate-in fade-in duration-500">
+      <div className="flex-none flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
+        <div>
+          <h2 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Deposits</h2>
+          <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Manage Member Payments</p>
+        </div>
+        <div className="flex items-center gap-3">
+           <div className="flex items-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm hover:shadow-md transition-all">
+              <Calendar className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
+              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-white w-28 md:w-auto cursor-pointer" />
            </div>
           {user && (
-            <Button onClick={() => setIsModalOpen(true)} className="shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 bg-emerald-600 hover:bg-emerald-700 px-3 py-2 text-sm">
-              <Plus className="h-4 w-4 stroke-[2px]" /> Add
+            <Button onClick={() => setIsModalOpen(true)} className="shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 rounded-2xl transition-transform hover:scale-105">
+              <Plus className="h-5 w-5 stroke-[2.5px]" /> <span className="font-bold">Add</span>
             </Button>
           )}
         </div>
       </div>
 
-      <div className="md:bg-white md:dark:bg-slate-800 md:rounded-2xl md:shadow-sm md:border md:border-slate-200 md:dark:border-slate-700 md:overflow-hidden">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-10 space-y-6 md:space-y-8">
+      
+      {/* Top Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-6 shadow-lg shadow-emerald-500/20 text-white relative overflow-hidden group">
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                  <div className="flex justify-between items-start mb-4">
+                      <div className="h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
+                          <Banknote className="h-5 w-5 text-white" />
+                      </div>
+                  </div>
+                  <div>
+                      <h3 className="text-3xl font-black mb-1">৳{monthTotal.toLocaleString()}</h3>
+                      <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Total Month Deposit</p>
+                  </div>
+              </div>
+          </div>
+          
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
+             <div className="flex flex-col h-full justify-between">
+                 <div className="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4">
+                     <ArrowDownLeft className="h-5 w-5" />
+                 </div>
+                 <div>
+                     <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-1">৳{monthAdvance.toLocaleString()}</h3>
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Advance Payments</p>
+                 </div>
+             </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
+             <div className="flex flex-col h-full justify-between">
+                 <div className="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4">
+                     <ArrowDownLeft className="h-5 w-5" />
+                 </div>
+                 <div>
+                     <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-1">৳{monthFinal.toLocaleString()}</h3>
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Final Settlements</p>
+                 </div>
+             </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
+             <div className="flex flex-col h-full justify-between">
+                 <div className="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-4">
+                     <UsersRound className="h-5 w-5" />
+                 </div>
+                 <div>
+                     <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-1">{uniqueMembersPaid}</h3>
+                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Members Paid</p>
+                 </div>
+             </div>
+          </div>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-900/20 flex justify-between items-center">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
+                  <Banknote className="h-5 w-5 text-emerald-500" /> Recent Transactions
+              </h3>
+          </div>
           {/* Desktop Table */}
           <table className="hidden md:table w-full text-left">
             <thead className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
@@ -185,32 +254,32 @@ export const Money: React.FC = () => {
           </table>
 
           {/* Mobile List View */}
-          <div className="md:hidden flex flex-col gap-3">
+          <div className="md:hidden flex flex-col gap-3 p-4 bg-slate-50/30 dark:bg-slate-900/10">
              {filteredDeposits.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 dark:text-slate-400">
+                <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 dark:text-slate-400">
                     No deposits found for this month.
                 </div>
              ) : (
                filteredDeposits.map(deposit => (
-                 <div key={deposit.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between active:scale-[0.98] transition-transform">
-                    <div className="flex items-center gap-3">
-                       <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-                          <ArrowDownLeft className="h-5 w-5" />
+                 <div key={deposit.id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-4">
+                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner">
+                          <ArrowDownLeft className="h-6 w-6 stroke-[1.5px]" />
                        </div>
                        <div>
-                          <h4 className="font-bold text-slate-800 dark:text-white text-sm">{deposit.memberName}</h4>
-                          <p className="text-xs text-slate-400 dark:text-slate-500">For {format(new Date(deposit.date), 'MMM yyyy')} • Paid {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</p>
-                          {deposit.note && <p className="text-[10px] text-slate-500 mt-0.5">{deposit.note}</p>}
+                          <h4 className="font-bold text-slate-800 dark:text-white text-base">{deposit.memberName}</h4>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">For {format(new Date(deposit.date), 'MMM yyyy')} • Paid {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</p>
+                          {deposit.note && <p className="text-[11px] text-slate-500 mt-0.5 bg-slate-100 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">{deposit.note}</p>}
                        </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                       <span className="font-bold text-emerald-600 dark:text-emerald-400 text-base">+৳{deposit.amount}</span>
-                       <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mb-1 ${(!deposit.type || deposit.type === 'advance') ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                    <div className="flex flex-col items-end gap-1.5">
+                       <span className="font-black text-emerald-600 dark:text-emerald-400 text-lg tracking-tight">+৳{deposit.amount}</span>
+                       <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider mb-1 ${(!deposit.type || deposit.type === 'advance') ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
                            {(!deposit.type || deposit.type === 'advance') ? 'Advance' : 'Final'}
                        </span>
                        {user && (
-                         <button onClick={() => initiateDelete(deposit)} className="p-2 bg-slate-50 dark:bg-slate-700 rounded-lg text-slate-300 dark:text-slate-500 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors">
-                            <Trash2 className="h-3.5 w-3.5" />
+                         <button onClick={() => initiateDelete(deposit)} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                            <Trash2 className="h-4 w-4" />
                          </button>
                        )}
                     </div>
@@ -219,6 +288,7 @@ export const Money: React.FC = () => {
              )}
            </div>
         </div>
+      </div>
 
       {/* Add Modal */}
       {isModalOpen && user && (
@@ -248,7 +318,7 @@ export const Money: React.FC = () => {
                        </div>
                        <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2 mt-1">
                            <span className="text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider self-center">Current Balance</span>
-                           <span className={`font-black text-lg ${selectedMemberStats.netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                           <span className={`font-black text-lg ${selectedMemberStats.netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>
                                {selectedMemberStats.netBalance >= 0 ? '+' : ''}৳{selectedMemberStats.netBalance}
                            </span>
                        </div>

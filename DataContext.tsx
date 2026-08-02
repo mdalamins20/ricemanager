@@ -1,7 +1,8 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import { Member, DailyMealDoc, Deposit, AppSettings } from './types';
+import { format } from 'date-fns';
 
 interface DataContextType {
   members: Member[];
@@ -21,6 +22,7 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [messName, setMessName] = useState('RiceMgr');
+  const [autoPopulated, setAutoPopulated] = useState(false);
 
   useEffect(() => {
     // 1. Listen to Members
@@ -58,6 +60,42 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unsubSettings();
     };
   }, []);
+
+  useEffect(() => {
+    // Only auto-populate if data is loaded, members exist, and we haven't done it yet
+    if (loading || autoPopulated || members.length === 0) return;
+
+    const checkAndAutoPopulate = async () => {
+        const currentUser = auth.currentUser;
+        if (!currentUser) return; // Only logged-in users can trigger auto-populate
+
+        const todayStr = format(new Date(), 'yyyy-MM-dd');
+        const todayMealExists = allMeals.some(m => m.date === todayStr);
+
+        if (!todayMealExists) {
+            const activeMembers = members.filter(m => m.status === 'active');
+            if (activeMembers.length > 0) {
+                const currentEntries: Record<string, { lunch: boolean; dinner: boolean; guestLunch: number; guestDinner: number }> = {};
+                activeMembers.forEach(m => {
+                    const defaultMeals = m.defaultMeals || { lunch: true, dinner: true };
+                    currentEntries[m.id] = { lunch: defaultMeals.lunch, dinner: defaultMeals.dinner, guestLunch: 0, guestDinner: 0 };
+                });
+                
+                try {
+                    await db.collection('meals').doc(todayStr).set({
+                        date: todayStr,
+                        entries: currentEntries
+                    }, { merge: true });
+                } catch (err) {
+                    console.error("Auto-populate error for today:", err);
+                }
+            }
+        }
+        setAutoPopulated(true);
+    };
+
+    checkAndAutoPopulate();
+  }, [loading, autoPopulated, members, allMeals]);
 
   return (
     <DataContext.Provider value={{ members, allMeals, allDeposits, settings, loading, messName }}>

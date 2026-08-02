@@ -147,7 +147,7 @@ const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ memb
                     className="outline-none text-slate-800 dark:text-white font-bold bg-transparent text-sm cursor-pointer"
                   />
                 </div>
-                <div className={`px-3 py-1 rounded-lg font-bold text-sm ${history.netBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'}`}>
+                <div className={`px-3 py-1 rounded-lg font-bold text-sm ${history.netBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'}`}>
                    Net: {history.netBalance >= 0 ? '+' : ''}{history.netBalance} ৳
                 </div>
              </div>
@@ -347,10 +347,10 @@ export const Members: React.FC = () => {
 
   return (
     <>
-      <div className="space-y-6 md:space-y-8 animate-in fade-in duration-500">
+      <div className="h-full flex flex-col animate-in fade-in duration-500">
         {viewMember && <MemberHistory member={viewMember} onClose={() => setViewMember(null)} />}
 
-        <div className="flex items-center justify-between">
+        <div className="flex-none flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
           <div>
             <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white tracking-tight">Members</h2>
             <p className="text-slate-500 dark:text-slate-400 text-xs font-medium uppercase tracking-widest mt-1">
@@ -365,6 +365,7 @@ export const Members: React.FC = () => {
           )}
         </div>
 
+        <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 md:space-y-8 pb-10">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
               <div className="h-12 w-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
@@ -441,7 +442,7 @@ export const Members: React.FC = () => {
             ))}
           </div>
         )}
-      </div>
+        </div>
 
       {/* Add/Edit Modal (Responsive) */}
       {isModalOpen && user && (
@@ -523,6 +524,7 @@ export const Members: React.FC = () => {
             </div>
         </div>
       )}
+      </div>
     </>
   );
 };
