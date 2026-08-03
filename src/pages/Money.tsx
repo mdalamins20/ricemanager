@@ -7,7 +7,7 @@ import { WalletCards, Plus, Trash2, Calendar, User as UserIcon, Lock, ArrowDownL
 import { Member, Deposit } from '../types';
 import { format } from 'date-fns';
 import { logAction } from '../utils/logger';
-import { useData } from '../DataContext';
+import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
 
 export const Money: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -29,7 +29,11 @@ export const Money: React.FC = () => {
 
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
 
-  const { members, allMeals, allDeposits, settings, loading: dataLoading } = useData();
+  const { members, loading: membersLoading } = useMembers();
+  const { allMeals, loading: mealsLoading } = useMeals();
+  const { allDeposits, loading: depositsLoading } = useDeposits();
+  const { settings, loading: settingsLoading } = useSettings();
+  const dataLoading = membersLoading || mealsLoading || depositsLoading || settingsLoading;
 
   const selectedMemberStats = useMemo(() => {
       if (!formData.memberId) return null;
@@ -68,7 +72,7 @@ export const Money: React.FC = () => {
     return allDeposits
       .map(d => {
         const member = members.find(m => m.id === d.memberId);
-        return { ...d, memberName: member ? member.fullName : 'Unknown' };
+        return { ...d, memberName: member ? member.fullName : 'Unknown', photoBase64: member?.photoBase64 };
       })
       .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
   }, [allDeposits, members]);
@@ -129,6 +133,36 @@ export const Money: React.FC = () => {
   const monthFinal = filteredDeposits.filter((d: any) => d.type === 'final').reduce((acc: any, curr: any) => acc + curr.amount, 0);
   const uniqueMembersPaid = new Set(filteredDeposits.map((d: any) => d.memberId)).size;
 
+  const trueNetBalance = useMemo(() => {
+      const currentPrice = settings?.mealPrice || 65;
+      const [year, month] = selectedMonth.split('-');
+      // Start of NEXT month (to include all days of selectedMonth)
+      const nextMonthStr = format(new Date(parseInt(year), parseInt(month), 1), 'yyyy-MM-dd');
+      
+      let totalDeposit = 0;
+      allDeposits.forEach(d => {
+          if (d.date < nextMonthStr) {
+              totalDeposit += d.amount;
+          }
+      });
+      
+      let totalMeals = 0;
+      allMeals.forEach(mDoc => {
+          if (mDoc.date < nextMonthStr) {
+              Object.values(mDoc.entries || {}).forEach(entry => {
+                  if (entry.lunch) totalMeals++;
+                  if (entry.dinner) totalMeals++;
+                  if (entry.guestLunch) totalMeals += entry.guestLunch;
+                  if (entry.guestDinner) totalMeals += entry.guestDinner;
+              });
+          }
+      });
+      
+      return totalDeposit - (totalMeals * currentPrice);
+  }, [allMeals, allDeposits, selectedMonth, settings]);
+
+
+
   return (
     <div className="h-full flex flex-col animate-in fade-in duration-500">
       <div className="flex-none flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
@@ -152,7 +186,7 @@ export const Money: React.FC = () => {
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10 space-y-6 md:space-y-8">
       
       {/* Top Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-6 shadow-lg shadow-emerald-500/20 text-white relative overflow-hidden group">
               <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
               <div className="relative z-10 flex flex-col h-full justify-between">
@@ -164,6 +198,24 @@ export const Money: React.FC = () => {
                   <div>
                       <h3 className="text-3xl font-black mb-1">৳{monthTotal.toLocaleString()}</h3>
                       <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Total Month Deposit</p>
+                  </div>
+              </div>
+          </div>
+          
+          {/* Current Balance Card */}
+          <div className={`rounded-3xl p-6 shadow-lg text-white relative overflow-hidden group ${trueNetBalance >= 0 ? 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-500/20' : 'bg-gradient-to-br from-rose-500 to-orange-500 shadow-rose-500/20'}`}>
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                  <div className="flex justify-between items-start mb-4">
+                      <div className="h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
+                          {trueNetBalance >= 0 ? <Banknote className="h-5 w-5 text-white" /> : <AlertTriangle className="h-5 w-5 text-white" />}
+                      </div>
+                  </div>
+                  <div>
+                      <h3 className="text-3xl font-black mb-1">
+                          {trueNetBalance >= 0 ? '+' : ''}৳{trueNetBalance.toLocaleString()}
+                      </h3>
+                      <p className="text-xs font-bold text-white/80 uppercase tracking-wider">Net Balance</p>
                   </div>
               </div>
           </div>
@@ -236,7 +288,18 @@ export const Money: React.FC = () => {
                         <div className="font-bold text-slate-800 dark:text-slate-200">{format(new Date(deposit.date), 'MMM yyyy')}</div>
                         <div className="text-[10px] text-slate-500 uppercase font-bold mt-0.5">Paid: {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</div>
                     </td>
-                    <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{deposit.memberName}</td>
+                    <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-500 overflow-hidden shrink-0">
+                                {(deposit as any).photoBase64 ? (
+                                    <img src={(deposit as any).photoBase64} alt={deposit.memberName} className="h-full w-full object-cover" />
+                                ) : (
+                                    deposit.memberName.charAt(0)
+                                )}
+                            </div>
+                            <span className="font-bold text-slate-800 dark:text-slate-200">{deposit.memberName}</span>
+                        </div>
+                    </td>
                     <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                             <span className="text-emerald-600 dark:text-emerald-400 font-bold">+৳{deposit.amount}</span>
@@ -261,15 +324,19 @@ export const Money: React.FC = () => {
                 </div>
              ) : (
                filteredDeposits.map(deposit => (
-                 <div key={deposit.id} className="bg-white dark:bg-slate-800 p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between active:scale-[0.98] transition-transform">
-                    <div className="flex items-center gap-4">
-                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner">
-                          <ArrowDownLeft className="h-6 w-6 stroke-[1.5px]" />
+                 <div key={deposit.id} className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-start justify-between active:scale-[0.98] transition-transform gap-2">
+                    <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner overflow-hidden shrink-0">
+                          {(deposit as any).photoBase64 ? (
+                              <img src={(deposit as any).photoBase64} alt={deposit.memberName} className="h-full w-full object-cover" />
+                          ) : (
+                              <ArrowDownLeft className="h-6 w-6 stroke-[1.5px]" />
+                          )}
                        </div>
-                       <div>
-                          <h4 className="font-bold text-slate-800 dark:text-white text-base">{deposit.memberName}</h4>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">For {format(new Date(deposit.date), 'MMM yyyy')} • Paid {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</p>
-                          {deposit.note && <p className="text-[11px] text-slate-500 mt-0.5 bg-slate-100 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700">{deposit.note}</p>}
+                       <div className="min-w-0 flex-1">
+                          <h4 className="font-bold text-slate-800 dark:text-white text-base truncate">{deposit.memberName}</h4>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate">For {format(new Date(deposit.date), 'MMM yyyy')} • Paid {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</p>
+                          {deposit.note && <p className="text-[11px] text-slate-500 mt-0.5 bg-slate-100 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 truncate max-w-full">{deposit.note}</p>}
                        </div>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">

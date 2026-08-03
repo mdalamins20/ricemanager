@@ -4,37 +4,20 @@ import { db } from '../firebase';
 import { format } from 'date-fns';
 import { Banknote, Calendar, ChevronDown, Download, MessageCircle } from 'lucide-react';
 import { AppSettings, Deposit, DailyMealDoc, Member } from '../types';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { useData } from '../DataContext';
+import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
+import { generatePDF, MemberReport, DailyLog } from '../utils/pdfGenerator';
 
-interface DailyLog {
-  date: string;
-  lunch: boolean;
-  dinner: boolean;
-  guestLunch: number;
-  guestDinner: number;
-}
 
-interface MemberReport {
-  memberId: string;
-  memberName: string;
-  phone: string;
-  prevBalance: number;
-  advanceDeposit: number;
-  finalDeposit: number;
-  remainingDeposit: number;
-  totalMeals: number;
-  totalCost: number;
-  currentBalance: number;
-  dailyLogs: DailyLog[];
-}
 
 export const Reports: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const { members, allMeals, allDeposits, settings, loading } = useData();
+  const { members, loading: membersLoading } = useMembers();
+  const { allMeals, loading: mealsLoading } = useMeals();
+  const { allDeposits, loading: depositsLoading } = useDeposits();
+  const { settings, loading: settingsLoading } = useSettings();
+  const loading = membersLoading || mealsLoading || depositsLoading || settingsLoading;
 
   const reportData = useMemo(() => {
     if (loading) return [];
@@ -105,109 +88,23 @@ export const Reports: React.FC = () => {
           totalMeals: currentMonthMeals, 
           totalCost, 
           currentBalance,
-          dailyLogs
+          dailyLogs,
+          photoBase64: member.photoBase64
       };
     });
   }, [selectedMonth, members, allMeals, allDeposits, settings, loading]);
 
-  const generatePDF = (item: MemberReport) => {
-    const doc = new jsPDF({
-      orientation: 'p',
-      unit: 'mm',
-      format: 'a4'
-    });
 
-    const monthName = format(new Date(selectedMonth), 'MMMM yyyy');
-
-    doc.setFillColor(30, 41, 59);
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(28);
-    doc.setFont('helvetica', 'bold');
-    doc.text('RiceManager', 15, 25);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('DETAILED MONTHLY STATEMENT', 150, 25);
-
-    doc.setTextColor(51, 65, 85);
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Member Information', 15, 55);
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Name: ${item.memberName}`, 15, 63);
-    doc.text(`Phone: ${item.phone}`, 15, 69);
-    doc.text(`Billing Month: ${monthName}`, 15, 75);
-    doc.text(`Statement Date: ${format(new Date(), 'dd MMM, yyyy')}`, 15, 81);
-
-    autoTable(doc, {
-      startY: 90,
-      head: [['Financial Summary', 'Amount (BDT)']],
-      body: [
-        ['Previous Balance (Brought Forward)', `${item.prevBalance >= 0 ? '+' : ''}${item.prevBalance}`],
-        ['Advance Deposit', `+${item.advanceDeposit}`],
-        ['Final Settlement', `+${item.finalDeposit}`],
-        ['Total Available Funds', `${item.remainingDeposit}`],
-        [`Total Meals Consumed (${item.totalMeals})`, `-${item.totalCost}`],
-      ],
-      theme: 'grid',
-      styles: { fontSize: 11, cellPadding: 6 },
-      headStyles: { fillColor: [71, 85, 105], textColor: [255, 255, 255], fontStyle: 'bold' },
-      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } }
-    });
-
-    const finalY = (doc as any).lastAutoTable.finalY + 10;
-    doc.setFillColor(item.currentBalance >= 0 ? 240 : 254, item.currentBalance >= 0 ? 253 : 242, item.currentBalance >= 0 ? 244 : 242);
-    doc.rect(15, finalY, 180, 20, 'F');
-    doc.setTextColor(item.currentBalance >= 0 ? 5 : 185, item.currentBalance >= 0 ? 150 : 28, item.currentBalance >= 0 ? 105 : 28);
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Closing Balance:', 25, finalY + 13);
-    doc.text(`${item.currentBalance} TK`, 185, finalY + 13, { align: 'right' });
-
-    doc.addPage();
-    doc.setFillColor(30, 41, 59);
-    doc.rect(0, 0, 210, 20, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(14);
-    doc.text('Daily Meal Consumption Log', 15, 13);
-
-    autoTable(doc, {
-      startY: 25,
-      head: [['Date', 'Lunch', 'Dinner', 'Guest', 'Total']],
-      body: item.dailyLogs.map(log => [
-          format(new Date(log.date), 'dd MMM (EEE)'),
-          log.lunch ? '1' : '-',
-          log.dinner ? '1' : '-',
-          (log.guestLunch + log.guestDinner) > 0 ? (log.guestLunch + log.guestDinner) : '-',
-          (log.lunch ? 1 : 0) + (log.dinner ? 1 : 0) + log.guestLunch + log.guestDinner
-      ]),
-      theme: 'striped',
-      styles: { fontSize: 9, halign: 'center' },
-      headStyles: { fillColor: [100, 116, 139] },
-      columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } }
-    });
-
-    const pageCount = (doc as any).internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setTextColor(148, 163, 184);
-        doc.setFontSize(8);
-        doc.text(`Page ${i} of ${pageCount} | Generated by RiceManager`, 105, 285, { align: 'center' });
-    }
-
-    return doc;
-  };
 
   const downloadReceipt = (item: MemberReport) => {
-    const doc = generatePDF(item);
+    const doc = generatePDF(item, selectedMonth);
     doc.save(`Report_${item.memberName}_${selectedMonth}.pdf`);
   };
 
   const sendWhatsApp = async (item: MemberReport) => {
       setSendingId(item.memberId);
       try {
-          const doc = generatePDF(item);
+          const doc = generatePDF(item, selectedMonth);
           // Convert PDF to Base64 string
           const pdfBase64 = doc.output('datauristring').split(',')[1];
           
@@ -292,7 +189,7 @@ export const Reports: React.FC = () => {
        </div>
 
        <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pb-10">
-       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
                <div className="relative z-10">
                    <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Total Meals</p>
@@ -352,7 +249,18 @@ export const Reports: React.FC = () => {
                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                    {reportData.map((item) => (
                        <tr key={item.memberId} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 text-sm transition-colors">
-                           <td className="px-4 py-3 font-bold dark:text-slate-200">{item.memberName}</td>
+                           <td className="px-4 py-3 dark:text-slate-200">
+                               <div className="flex items-center gap-3">
+                                   <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-500 overflow-hidden shrink-0">
+                                       {item.photoBase64 ? (
+                                           <img src={item.photoBase64} alt={item.memberName} className="h-full w-full object-cover" />
+                                       ) : (
+                                           item.memberName.charAt(0)
+                                       )}
+                                   </div>
+                                   <span className="font-bold">{item.memberName}</span>
+                               </div>
+                           </td>
                            <td className={`px-4 py-3 text-center font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.prevBalance}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.advanceDeposit}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.finalDeposit}</td>
@@ -387,7 +295,16 @@ export const Reports: React.FC = () => {
             return (
               <div key={item.memberId} className="bg-white dark:bg-slate-800 rounded-3xl p-5 shadow-sm border border-slate-100 dark:border-slate-700" onClick={() => setExpandedCard(isExpanded ? null : item.memberId)}>
                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-slate-800 dark:text-white text-lg">{item.memberName}</h3>
+                     <div className="flex items-center gap-3">
+                         <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-500 overflow-hidden shrink-0">
+                             {item.photoBase64 ? (
+                                 <img src={item.photoBase64} alt={item.memberName} className="h-full w-full object-cover" />
+                             ) : (
+                                 item.memberName.charAt(0)
+                             )}
+                         </div>
+                         <h3 className="font-bold text-slate-800 dark:text-white text-lg">{item.memberName}</h3>
+                     </div>
                     <div className={`px-3 py-1 rounded-full text-xs font-bold ${item.currentBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'}`}>
                         {item.currentBalance} ৳
                     </div>

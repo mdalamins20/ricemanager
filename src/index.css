@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-sans: "Hind Siliguri", "Inter", sans-serif;
+  --color-primary: #dc2626;
+}
+
+body {
+  font-family: 'Hind Siliguri', 'Inter', sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.3s, color 0.3s;
+}
+body.light { background-color: #f8fafc; color: #0f172a; }
+body.dark { background-color: #0f172a; color: #f8fafc; }
+
+/* Hide scrollbar for clean mobile look */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; 
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+input, select, textarea {
+  font-size: 16px !important;
+}
+.light input, .light select, .light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+.dark input, .dark select, .dark textarea {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+/* Aggressive Autofill Fix for Dark Mode */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  transition: background-color 5000s ease-in-out 0s;
+}
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover, 
+.dark input:-webkit-autofill:focus,
+.dark input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1e293b inset !important;
+  -webkit-text-fill-color: #f8fafc !important;
+  color: #f8fafc !important;
+}

@@ -14,7 +14,7 @@ const NavItems = [
   { icon: PieChart, label: 'Report', path: '/reports' },
 ];
 
-import { useData } from '../DataContext';
+import { useSettings } from '../contexts';
 import { Moon, Sun } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,7 +23,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
-  const { messName } = useData();
+  const { messName } = useSettings();
   const [user, setUser] = useState<firebase.User | null>(null);
   const navigate = useNavigate();
 
@@ -53,8 +53,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
           className="text-2xl font-bold text-indigo-600 flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer group"
           title="Visit Developer Website"
         >
-          <div className="bg-transparent p-0 rounded-lg transition-colors">
-            <img src="/logo.png" alt="Logo" className="h-10 w-10 object-contain" />
+          <div className="bg-transparent p-0 rounded-full transition-colors overflow-hidden">
+            <img src="/logo.png" alt="Logo" className="h-10 w-10 object-contain rounded-full bg-white" />
           </div>
           <span className="tracking-tight">{messName}</span>
         </a>
@@ -145,7 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
 
 export const BottomNav: React.FC = () => {
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 md:hidden z-50 pb-safe transition-colors duration-300">
+    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 md:hidden z-[100] pb-safe transition-colors duration-300">
       <div className="flex justify-around items-center h-16">
         {NavItems.map((item) => (
           <NavLink

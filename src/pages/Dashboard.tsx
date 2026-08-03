@@ -2,13 +2,25 @@
 import React, { useMemo, useState } from 'react';
 import { UsersRound, UtensilsCrossed, Banknote, TrendingUp, TrendingDown, Receipt, ChefHat, ChevronRight, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
-import { useData } from '../DataContext';
+import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
 
 export const Dashboard: React.FC = () => {
-  const { members, allMeals, allDeposits, settings } = useData();
+  const { members } = useMembers();
+  const { allMeals } = useMeals();
+  const { allDeposits } = useDeposits();
+  const { settings } = useSettings();
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const currentMonthName = format(new Date(selectedMonth), 'MMMM yyyy');
   const currentMonthPrefix = selectedMonth;
+
+  const getYoutubeVideoId = (url: string) => {
+      if (!url) return null;
+      const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const match = url.match(regExp);
+      return (match && match[2].length === 11) ? match[2] : null;
+  };
+
+  const videoId = getYoutubeVideoId(settings?.youtubeVideoUrl || '');
 
   const stats = useMemo(() => {
     const activeMembers = members.filter(m => m.status === 'active').length;
@@ -55,26 +67,48 @@ export const Dashboard: React.FC = () => {
             <span className="text-sm font-bold uppercase tracking-widest">{currentMonthName}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm hover:shadow-md transition-all">
-            <Calendar className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
-            <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-white cursor-pointer" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full md:w-auto mt-4 md:mt-0">
+           <div className="flex items-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+               <span className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Meal Rate:</span>
+               <span className="text-sm font-black text-indigo-600 dark:text-indigo-400">৳{settings?.mealPrice || 65}</span>
+           </div>
+           <div className="flex items-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm hover:shadow-md transition-all w-full sm:w-auto">
+               <Calendar className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
+               <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-white cursor-pointer w-full" />
+           </div>
         </div>
       </div>
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 md:space-y-8 pb-10">
       {/* Hero Banner (Net Status) */}
-      <div className={`relative overflow-hidden rounded-3xl p-8 md:p-10 shadow-2xl transition-all ${stats.netBalance >= 0 ? 'bg-gradient-to-br from-emerald-500 via-teal-600 to-emerald-900' : 'bg-gradient-to-br from-rose-500 via-red-600 to-rose-900'}`}>
-         {/* Glassmorphism overlays & blobs */}
-         <div className="absolute top-0 right-0 -mt-20 -mr-20 w-64 h-64 bg-white/20 rounded-full blur-3xl"></div>
-         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-64 h-64 bg-black/20 rounded-full blur-3xl"></div>
+      <div className={`relative overflow-hidden rounded-3xl p-8 md:p-10 shadow-2xl transition-all ${videoId ? 'bg-black' : (stats.netBalance >= 0 ? 'bg-gradient-to-br from-emerald-500 via-teal-600 to-emerald-900' : 'bg-gradient-to-br from-rose-500 via-red-600 to-rose-900')}`}>
+         
+         {videoId && (
+             <div className="absolute inset-0 z-0 opacity-60 pointer-events-none overflow-hidden bg-black rounded-3xl">
+                 <iframe 
+                    src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&loop=1&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&disablekb=1&playlist=${videoId}`}
+                    className="absolute top-1/2 left-1/2 w-[200vw] h-[200vh] min-w-[200%] min-h-[200%] -translate-x-1/2 -translate-y-1/2 object-cover pointer-events-none"
+                    frameBorder="0"
+                    allow="autoplay; encrypted-media"
+                 />
+             </div>
+         )}
+
+         {!videoId && (
+             <>
+                 {/* Glassmorphism overlays & blobs */}
+                 <div className="absolute top-0 right-0 -mt-20 -mr-20 w-64 h-64 bg-white/20 rounded-full blur-3xl z-0"></div>
+                 <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-64 h-64 bg-black/20 rounded-full blur-3xl z-0"></div>
+             </>
+         )}
          
          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
                 <p className="text-xs md:text-sm font-bold text-white/80 uppercase tracking-[0.2em] mb-2 drop-shadow-sm">Current Net Standing</p>
                 <div className="flex items-baseline gap-2">
-                    <h3 className="text-5xl md:text-7xl font-black text-white tracking-tighter drop-shadow-md">
-                       <span className="text-3xl md:text-5xl opacity-80 mr-1">৳</span>
+                    <h3 className="text-4xl md:text-7xl font-black text-white tracking-tighter drop-shadow-md">
+                       <span className="text-2xl md:text-5xl opacity-80 mr-1">৳</span>
                        {Math.abs(stats.netBalance).toLocaleString()}
                     </h3>
                 </div>
@@ -97,7 +131,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Main Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         
         {/* Active Members */}
         <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm p-6 rounded-3xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm flex flex-col gap-4 group hover:-translate-y-1 hover:shadow-xl transition-all duration-300">
@@ -164,7 +198,7 @@ export const Dashboard: React.FC = () => {
         >
             <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative z-10">
-              <h3 className="text-2xl font-black text-white mb-2 flex items-center gap-2">
+              <h3 className="text-xl md:text-2xl font-black text-white mb-2 flex items-center gap-2">
                  Meal Entry <ChevronRight className="h-5 w-5 opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all duration-300" />
               </h3>
               <p className="text-slate-400 text-sm font-medium">Record daily meals and manage guests effortlessly.</p>
@@ -180,7 +214,7 @@ export const Dashboard: React.FC = () => {
         >
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
             <div className="relative z-10">
-              <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-2 flex items-center gap-2">
+              <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-white mb-2 flex items-center gap-2">
                  Add Money <ChevronRight className="h-5 w-5 text-emerald-500 opacity-0 -ml-4 group-hover:opacity-100 group-hover:ml-0 transition-all duration-300" />
               </h3>
               <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Record payments, deposits, and settlements.</p>

@@ -7,17 +7,17 @@ import { auth } from '../firebase';
 import firebase from 'firebase/compat/app';
 import { InstallPWA } from './InstallPWA';
 
-import { useData } from '../DataContext';
+import { useSettings } from '../contexts';
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
-  const { messName, loading } = useData();
+  const { messName, loading } = useSettings();
   const [user, setUser] = useState<firebase.User | null>(auth.currentUser);
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+    const unsubscribe = auth.onAuthStateChanged((currentUser: firebase.User | null) => {
       setUser(currentUser);
     });
     return () => unsubscribe();
@@ -139,7 +139,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         )}
 
-        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-4 md:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
+        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-3 sm:p-4 md:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
           {children}
         </div>
 

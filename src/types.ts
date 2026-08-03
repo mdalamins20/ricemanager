@@ -1,4 +1,3 @@
-
 export interface Member {
   id: string;
   fullName: string;
@@ -7,6 +6,7 @@ export interface Member {
   joinDate: string;
   status: 'active' | 'inactive';
   defaultMeals?: { lunch: boolean; dinner: boolean };
+  photoBase64?: string;
 }
 
 export interface MealEntry {
@@ -26,6 +26,7 @@ export interface DailyMealDoc {
 export interface AppSettings {
   mealPrice: number;
   messName?: string;
+  youtubeVideoUrl?: string;
 }
 
 export interface MonthlySummary {
