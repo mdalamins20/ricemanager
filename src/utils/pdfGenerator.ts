@@ -39,9 +39,10 @@ export const generatePDF = async (item: MemberReport, selectedMonth: string): Pr
   try {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
-    const loadPromise = new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
+    const loadPromise = new Promise((resolve) => {
+      const timeoutId = setTimeout(() => resolve(null), 2000); // 2 sec timeout
+      img.onload = () => { clearTimeout(timeoutId); resolve(null); };
+      img.onerror = () => { clearTimeout(timeoutId); resolve(null); };
     });
     img.src = '/logo.png';
     await loadPromise;

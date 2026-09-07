@@ -57,8 +57,8 @@ export const Members: React.FC = () => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 400;
-        const MAX_HEIGHT = 400;
+        const MAX_WIDTH = 150;
+        const MAX_HEIGHT = 150;
         let width = img.width;
         let height = img.height;
 
@@ -73,7 +73,8 @@ export const Members: React.FC = () => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
         
-        const dataUrl = canvas.toDataURL('image/webp', 0.8);
+        // Use webp with 0.6 quality for extreme compression (fast loading)
+        const dataUrl = canvas.toDataURL('image/webp', 0.6);
         setFormData(prev => ({ ...prev, photoBase64: dataUrl }));
       };
       img.src = event.target?.result as string;
