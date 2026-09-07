@@ -60,6 +60,7 @@ export interface VendorPayment {
   id: string;
   amount: number;
   date: string; // YYYY-MM-DD
+  forMonth?: string; // YYYY-MM
   note?: string;
   createdAt: string;
 }
