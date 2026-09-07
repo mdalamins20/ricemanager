@@ -204,7 +204,7 @@ export const MealEntry: React.FC = () => {
               disabled={disabled}
               value={count}
               onChange={(e) => onChange(Number(e.target.value))}
-              className="pl-2.5 pr-6 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md outline-none text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer appearance-none shadow-sm hover:border-indigo-300 dark:hover:border-indigo-500/50 transition-colors"
+              className="pl-2.5 pr-6 py-0.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md outline-none text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer appearance-none shadow-sm hover:border-emerald-300 dark:hover:border-emerald-500/50 transition-colors"
             >
               {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
                 <option key={n} value={n}>{n}</option>
@@ -254,8 +254,8 @@ export const MealEntry: React.FC = () => {
           <button onClick={handlePrevDay} className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
             <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-slate-400" />
           </button>
-          <div className="flex items-center gap-2 sm:gap-3 bg-white dark:bg-slate-800 p-2 px-2 sm:px-4 rounded-xl border border-indigo-100 dark:border-indigo-900/40 shadow-sm w-full md:w-auto ring-4 ring-indigo-50 dark:ring-indigo-900/10">
-            <CalendarDays className="h-5 w-5 text-indigo-500 dark:text-indigo-400 hidden sm:block" />
+          <div className="flex items-center gap-2 sm:gap-3 bg-white dark:bg-slate-800 p-2 px-2 sm:px-4 rounded-xl border border-emerald-100 dark:border-emerald-900/40 shadow-sm w-full md:w-auto ring-4 ring-emerald-50 dark:ring-emerald-900/10">
+            <CalendarDays className="h-5 w-5 text-emerald-500 dark:text-emerald-400 hidden sm:block" />
             <input
               type="date"
               max={format(new Date(), 'yyyy-MM-dd')}
@@ -284,7 +284,7 @@ export const MealEntry: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar pb-32 md:pb-10 space-y-4 md:space-y-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6 mb-8">
         {activeMembers.map((member: Member) => {
                 const entry = entries[member.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
                 return (
@@ -303,7 +303,7 @@ export const MealEntry: React.FC = () => {
                                    <div className="flex items-center gap-1 mt-0.5 opacity-80" title="Auto Meal Settings">
                                       <span className="text-[9px] uppercase font-bold text-slate-500 dark:text-slate-400">Auto:</span>
                                       {(member.defaultMeals?.lunch ?? true) && <SunMedium className="h-3 w-3 text-amber-500" />}
-                                      {(member.defaultMeals?.dinner ?? true) && <MoonStar className="h-3 w-3 text-indigo-500" />}
+                                      {(member.defaultMeals?.dinner ?? true) && <MoonStar className="h-3 w-3 text-emerald-500" />}
                                       {!(member.defaultMeals?.lunch ?? true) && !(member.defaultMeals?.dinner ?? true) && <span className="text-[9px] font-bold text-slate-400">None</span>}
                                    </div>
                                </div>
@@ -320,7 +320,7 @@ export const MealEntry: React.FC = () => {
                                 icon={SunMedium}
                                 label="Lunch"
                                 disabled={!user}
-                                colorClass="bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-lg shadow-orange-200/50 dark:shadow-orange-900/20 border-orange-400/20"
+                                colorClass="bg-gradient-to-br from-emerald-400 to-emerald-500 text-white shadow-lg shadow-emerald-200/50 dark:shadow-emerald-900/20 border-emerald-400/20"
                                 guestCount={entry.guestLunch}
                                 onGuestChange={(count: number) => updateGuest(member.id, 'guestLunch', count)}
                             />
@@ -330,7 +330,7 @@ export const MealEntry: React.FC = () => {
                                 icon={MoonStar}
                                 label="Dinner"
                                 disabled={!user}
-                                colorClass="bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/20 border-indigo-400/20"
+                                colorClass="bg-gradient-to-br from-teal-500 to-teal-600 text-white shadow-lg shadow-teal-200/50 dark:shadow-teal-900/20 border-teal-400/20"
                                 guestCount={entry.guestDinner}
                                 onGuestChange={(count: number) => updateGuest(member.id, 'guestDinner', count)}
                             />
@@ -361,7 +361,7 @@ export const MealEntry: React.FC = () => {
               </div>
               <div className="flex flex-col items-center px-1 sm:px-2">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Dinner</span>
-                  <span className="text-sm sm:text-base md:text-xl font-black text-indigo-600 dark:text-indigo-500">{totalDinner}</span>
+                  <span className="text-sm sm:text-base md:text-xl font-black text-emerald-600 dark:text-emerald-500">{totalDinner}</span>
               </div>
               <div className="flex flex-col items-center px-1 sm:px-2 border-l border-slate-100 dark:border-slate-800 ml-1 pl-2 sm:pl-4">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Guests</span>
@@ -385,8 +385,8 @@ export const MealEntry: React.FC = () => {
 
       {/* Custom Toast Notification */}
       {toast.show && (
-         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top-4 fade-in duration-300 ${toast.type === 'success' ? 'bg-white border-emerald-100 text-emerald-800' : 'bg-white border-indigo-100 text-indigo-800'}`}>
-            <div className={`p-2 rounded-full ${toast.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
+         <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top-4 fade-in duration-300 ${toast.type === 'success' ? 'bg-white border-emerald-100 text-emerald-800' : 'bg-white border-emerald-100 text-emerald-800'}`}>
+            <div className={`p-2 rounded-full ${toast.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-emerald-100 text-emerald-600'}`}>
                {toast.type === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
             </div>
             <div>

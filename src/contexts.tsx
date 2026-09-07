@@ -1,27 +1,31 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { db, auth } from './firebase';
-import { Member, DailyMealDoc, Deposit, AppSettings } from './types';
+import { Member, DailyMealDoc, Deposit, AppSettings, VendorPayment } from './types';
 import { format } from 'date-fns';
 
 interface MembersContextType { members: Member[]; loading: boolean; }
 interface MealsContextType { allMeals: DailyMealDoc[]; loading: boolean; }
 interface DepositsContextType { allDeposits: Deposit[]; loading: boolean; }
 interface SettingsContextType { settings: AppSettings | null; messName: string; loading: boolean; }
+interface VendorPaymentsContextType { vendorPayments: VendorPayment[]; loading: boolean; }
 
 const MembersContext = createContext<MembersContextType | undefined>(undefined);
 const MealsContext = createContext<MealsContextType | undefined>(undefined);
 const DepositsContext = createContext<DepositsContextType | undefined>(undefined);
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const VendorPaymentsContext = createContext<VendorPaymentsContextType | undefined>(undefined);
 
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [members, setMembers] = useState<Member[]>([]);
   const [allMeals, setAllMeals] = useState<DailyMealDoc[]>([]);
   const [allDeposits, setAllDeposits] = useState<Deposit[]>([]);
+  const [vendorPayments, setVendorPayments] = useState<VendorPayment[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   
   const [membersLoading, setMembersLoading] = useState(true);
   const [mealsLoading, setMealsLoading] = useState(true);
   const [depositsLoading, setDepositsLoading] = useState(true);
+  const [vendorPaymentsLoading, setVendorPaymentsLoading] = useState(true);
   const [settingsLoading, setSettingsLoading] = useState(true);
 
   const [messName, setMessName] = useState('RiceMgr');
@@ -43,6 +47,11 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
       setDepositsLoading(false);
     });
 
+    const unsubVendorPayments = db.collection('vendor_payments').onSnapshot(snap => {
+      setVendorPayments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VendorPayment)));
+      setVendorPaymentsLoading(false);
+    });
+
     const unsubSettings = db.collection('settings').doc('config').onSnapshot(doc => {
       if (doc.exists) {
         const data = doc.data() as AppSettings;
@@ -52,7 +61,7 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
       setSettingsLoading(false);
     });
 
-    return () => { unsubMembers(); unsubMeals(); unsubDeposits(); unsubSettings(); };
+    return () => { unsubMembers(); unsubMeals(); unsubDeposits(); unsubVendorPayments(); unsubSettings(); };
   }, []);
 
   useEffect(() => {
@@ -90,7 +99,9 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
       <MembersContext.Provider value={{ members, loading: membersLoading }}>
         <MealsContext.Provider value={{ allMeals, loading: mealsLoading }}>
           <DepositsContext.Provider value={{ allDeposits, loading: depositsLoading }}>
-            {children}
+            <VendorPaymentsContext.Provider value={{ vendorPayments, loading: vendorPaymentsLoading }}>
+              {children}
+            </VendorPaymentsContext.Provider>
           </DepositsContext.Provider>
         </MealsContext.Provider>
       </MembersContext.Provider>
@@ -116,5 +127,10 @@ export const useDeposits = () => {
 export const useSettings = () => {
   const ctx = useContext(SettingsContext);
   if (!ctx) throw new Error('useSettings must be used within AppProviders');
+  return ctx;
+};
+export const useVendorPayments = () => {
+  const ctx = useContext(VendorPaymentsContext);
+  if (!ctx) throw new Error('useVendorPayments must be used within AppProviders');
   return ctx;
 };

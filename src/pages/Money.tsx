@@ -74,7 +74,11 @@ export const Money: React.FC = () => {
         const member = members.find(m => m.id === d.memberId);
         return { ...d, memberName: member ? member.fullName : 'Unknown', photoBase64: member?.photoBase64 };
       })
-      .sort((a, b) => b.date.localeCompare(a.date)); // Sort by date descending
+      .sort((a, b) => {
+        const dateA = a.createdAt || a.date;
+        const dateB = b.createdAt || b.date;
+        return dateB.localeCompare(dateA);
+      });
   }, [allDeposits, members]);
 
   useEffect(() => {
@@ -203,7 +207,7 @@ export const Money: React.FC = () => {
           </div>
           
           {/* Current Balance Card */}
-          <div className={`rounded-3xl p-6 shadow-lg text-white relative overflow-hidden group ${trueNetBalance >= 0 ? 'bg-gradient-to-br from-indigo-500 to-violet-600 shadow-indigo-500/20' : 'bg-gradient-to-br from-rose-500 to-orange-500 shadow-rose-500/20'}`}>
+          <div className={`rounded-3xl p-6 shadow-lg text-white relative overflow-hidden group ${trueNetBalance >= 0 ? 'bg-gradient-to-br from-emerald-500 to-violet-600 shadow-emerald-500/20' : 'bg-gradient-to-br from-rose-500 to-orange-500 shadow-rose-500/20'}`}>
               <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
               <div className="relative z-10 flex flex-col h-full justify-between">
                   <div className="flex justify-between items-start mb-4">
@@ -246,7 +250,7 @@ export const Money: React.FC = () => {
 
           <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
              <div className="flex flex-col h-full justify-between">
-                 <div className="h-10 w-10 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-4">
+                 <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-4">
                      <UsersRound className="h-5 w-5" />
                  </div>
                  <div>
@@ -309,7 +313,7 @@ export const Money: React.FC = () => {
                         </div>
                     </td>
                     <td className="px-6 py-4 text-slate-500 dark:text-slate-500">{deposit.note}</td>
-                    <td className="px-6 py-4 text-right">{user && <button onClick={() => initiateDelete(deposit)} className="p-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-full transition-colors"><Trash2 className="h-4 w-4 text-slate-400 dark:text-slate-600 hover:text-indigo-600 dark:hover:text-indigo-400" /></button>}</td>
+                    <td className="px-6 py-4 text-right">{user && <button onClick={() => initiateDelete(deposit)} className="p-2 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full transition-colors"><Trash2 className="h-4 w-4 text-slate-400 dark:text-slate-600 hover:text-emerald-600 dark:hover:text-emerald-400" /></button>}</td>
                   </tr>
                 ))
               )}
@@ -418,7 +422,7 @@ export const Money: React.FC = () => {
             <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDeleteModal({ isOpen: false, deposit: null })} />
             <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-sm relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
                 <div className="flex flex-col items-center text-center gap-4">
-                    <div className="h-12 w-12 rounded-full flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400">
+                    <div className="h-12 w-12 rounded-full flex items-center justify-center bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400">
                         <AlertTriangle className="h-6 w-6" />
                     </div>
                     <div>
@@ -432,7 +436,7 @@ export const Money: React.FC = () => {
                         <Button variant="secondary" onClick={() => setDeleteModal({ isOpen: false, deposit: null })} className="flex-1 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700">
                             Cancel
                         </Button>
-                        <Button variant="primary" onClick={confirmDelete} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20">
+                        <Button variant="primary" onClick={confirmDelete} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20">
                             Delete
                         </Button>
                     </div>

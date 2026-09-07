@@ -119,7 +119,7 @@ export const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = 
         {/* Header */}
         <div className="p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-3xl md:rounded-t-3xl">
           <div className="flex items-center gap-3">
-             <div className="h-10 w-10 rounded-full bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg font-bold overflow-hidden shrink-0">
+             <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg font-bold overflow-hidden shrink-0">
                 {member.photoBase64 ? (
                    <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover" />
                 ) : (
@@ -160,9 +160,9 @@ export const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = 
                   <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-1">Total Meals</p>
                   <div className="text-xl font-bold text-orange-700 dark:text-orange-400">{history.monthTotalMeals}</div>
                 </div>
-                <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/40">
-                   <p className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-1">Cost</p>
-                   <div className="text-xl font-bold text-indigo-700 dark:text-indigo-400">৳{history.monthTotalCost}</div>
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
+                   <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Cost</p>
+                   <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">৳{history.monthTotalCost}</div>
                 </div>
                 <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-900/40">
                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Deposit</p>
@@ -194,10 +194,10 @@ export const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = 
                     </div>
                     {/* Dinner */}
                     <div className="flex flex-col items-center gap-1">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border ${day.dinner ? 'bg-indigo-100 border-indigo-200 text-indigo-600 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-slate-50 border-slate-100 text-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-500'}`}>
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border ${day.dinner ? 'bg-emerald-100 border-emerald-200 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-slate-50 border-slate-100 text-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-500'}`}>
                         <MoonStar className="h-3 w-3" />
                         </div>
-                        {day.guestDinner > 0 && <span className="text-[8px] font-bold text-indigo-600">G:{day.guestDinner}</span>}
+                        {day.guestDinner > 0 && <span className="text-[8px] font-bold text-emerald-600">G:{day.guestDinner}</span>}
                     </div>
                  </div>
                  <div className="text-sm font-bold text-slate-700 dark:text-slate-300 w-12 text-right">

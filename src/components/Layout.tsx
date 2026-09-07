@@ -46,48 +46,56 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
   if (loading) {
     return (
-      <div className="fixed inset-0 z-[100] bg-slate-900 flex flex-col items-center justify-center p-6 text-white overflow-hidden">
-        {/* Animated Background Circles */}
-        <div className="absolute top-0 left-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -ml-48 -mt-48 animate-pulse"></div>
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl -mr-48 -mb-48 animate-pulse delay-1000"></div>
+      <div className="fixed inset-0 z-[100] bg-slate-950 flex flex-col items-center justify-center overflow-hidden">
+        {/* Animated Background Mesh */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[100px] mix-blend-screen pointer-events-none"></div>
 
-        <div className="relative z-10 flex flex-col items-center gap-8 animate-in fade-in zoom-in duration-1000">
-          {/* Logo Container */}
-          <div className="relative">
-             <div className="h-24 w-24 bg-transparent flex items-center justify-center shadow-2xl shadow-indigo-600/40 animate-bounce transition-all duration-1000 rounded-[2rem] overflow-hidden">
-                <img src="/logo.png" alt="Logo" className="h-full w-full object-cover" />
-             </div>
-             {/* Ring Animation */}
-             <div className="absolute -inset-4 border border-indigo-500/30 rounded-[2.5rem] animate-ping opacity-20"></div>
+        <div className="relative z-10 flex flex-col items-center justify-center w-full max-w-sm px-6 animate-in fade-in zoom-in-95 duration-1000">
+          {/* Logo Container with Ripple */}
+          <div className="relative mb-10">
+            <div className="absolute inset-0 bg-emerald-500 rounded-full blur-2xl opacity-20 animate-pulse"></div>
+            <div className="absolute inset-0 border border-emerald-500/30 rounded-[2.5rem] animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
+            <div className="absolute inset-0 border border-emerald-400/20 rounded-[2.5rem] animate-[ping_3s_cubic-bezier(0,0,0.2,1)_infinite_1s]"></div>
+            
+            <div className="relative h-28 w-28 bg-white/5 backdrop-blur-xl rounded-[2rem] border border-white/10 shadow-2xl shadow-emerald-900/50 flex items-center justify-center p-2 overflow-hidden transform hover:scale-105 transition-transform duration-500 z-10">
+                <div className="h-full w-full bg-white rounded-[1.5rem] p-1 shadow-inner">
+                    <img src="/logo.png" alt="RiceManager Logo" className="h-full w-full object-cover rounded-xl" />
+                </div>
+            </div>
           </div>
 
-          <div className="text-center space-y-2">
-            <h1 className="text-4xl font-black tracking-tighter uppercase">
-              Rice<span className="text-indigo-500">Manager</span>
+          {/* Typography */}
+          <div className="text-center space-y-2 mb-12">
+            <h1 className="text-4xl md:text-5xl font-black text-white tracking-tight flex items-center justify-center drop-shadow-lg">
+              Meal<span className="text-emerald-500">Manager</span>
             </h1>
-            <p className="text-slate-400 text-xs font-bold uppercase tracking-[0.3em] opacity-80">
-              Advanced Mess Management System
+            <p className="text-emerald-400/80 text-[10px] md:text-xs font-bold uppercase tracking-[0.4em] drop-shadow-md">
+              Smart Mess Management
             </p>
           </div>
 
-          {/* Sleek Loading Bar */}
-          <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden mt-4">
-             <div className="h-full bg-indigo-600 w-1/2 rounded-full animate-[loading_2s_infinite_ease-in-out]"></div>
+          {/* Premium Loading Bar */}
+          <div className="w-full max-w-[200px] space-y-4">
+             <div className="h-1 w-full bg-slate-800/80 rounded-full overflow-hidden backdrop-blur-sm shadow-inner">
+                 <div className="h-full bg-gradient-to-r from-emerald-600 via-teal-400 to-emerald-600 w-1/3 rounded-full animate-[loading_1.5s_infinite_ease-in-out] bg-[length:200%_100%]"></div>
+             </div>
+             <p className="text-center text-[9px] font-bold text-slate-500 uppercase tracking-[0.3em] animate-pulse">Initializing System...</p>
           </div>
         </div>
 
-        {/* Footer Info */}
-        <div className="absolute bottom-10 text-center animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500">
-           <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              Developed by <span className="text-slate-300">MD AL AMIN</span>
+        {/* Developer Credit */}
+        <div className="absolute bottom-8 left-0 right-0 text-center opacity-50 hover:opacity-100 transition-opacity duration-500 animate-in fade-in slide-in-from-bottom-4 delay-700">
+           <p className="text-[9px] font-black text-slate-500 uppercase tracking-[0.2em]">
+              Crafted by <span className="text-emerald-500">MD AL AMIN</span>
            </p>
-           <p className="text-[8px] font-bold text-slate-600 mt-1">VERSION 2.0.4</p>
+           <p className="text-[8px] font-bold text-slate-700 mt-1.5 tracking-widest">VERSION 2.0.4 PRO</p>
         </div>
 
         <style>{`
           @keyframes loading {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(200%); }
+            0% { transform: translateX(-100%); background-position: 100% 0; }
+            100% { transform: translateX(300%); background-position: -100% 0; }
           }
         `}</style>
       </div>
@@ -111,7 +119,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                <div className="bg-transparent p-0 rounded-lg">
                   <img src="/logo.png" alt="Logo" className="h-8 w-8 object-contain" />
                </div>
-               <span className="font-bold text-xl text-indigo-600 tracking-tight">{messName}</span>
+               <span className="font-bold text-xl text-emerald-600 tracking-tight">{messName}</span>
              </a>
              
              <div className="flex items-center gap-2">
@@ -131,7 +139,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                      </button>
                   </>
                 ) : (
-                  <button onClick={() => navigate('/login')} className="p-2 text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 rounded-full">
+                  <button onClick={() => navigate('/login')} className="p-2 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 rounded-full">
                       <LogIn className="h-5 w-5" />
                   </button>
                 )}
@@ -139,7 +147,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         )}
 
-        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-3 sm:p-4 md:p-8 max-w-7xl mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
+        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-3 sm:p-4 md:p-8 max-w-[1600px] mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
           {children}
         </div>
 

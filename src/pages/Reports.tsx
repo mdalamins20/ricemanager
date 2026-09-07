@@ -96,15 +96,15 @@ export const Reports: React.FC = () => {
 
 
 
-  const downloadReceipt = (item: MemberReport) => {
-    const doc = generatePDF(item, selectedMonth);
+  const downloadReceipt = async (item: MemberReport) => {
+    const doc = await generatePDF(item, selectedMonth);
     doc.save(`Report_${item.memberName}_${selectedMonth}.pdf`);
   };
 
   const sendWhatsApp = async (item: MemberReport) => {
       setSendingId(item.memberId);
       try {
-          const doc = generatePDF(item, selectedMonth);
+          const doc = await generatePDF(item, selectedMonth);
           // Convert PDF to Base64 string
           const pdfBase64 = doc.output('datauristring').split(',')[1];
           
@@ -123,14 +123,22 @@ export const Reports: React.FC = () => {
           const baseUrl = window.location.origin + window.location.pathname + window.location.search;
           const reportLink = `${baseUrl}#/view-report?id=${reportRef.id}`;
 
-          const message = `*Monthly Statement: ${monthName}*\n\n` +
-              `Hello *${item.memberName}*,\n` +
-              `Your detailed meal report is ready.\n\n` +
-              `Total Meals: ${item.totalMeals}\n` +
-              `Total Bill: ${item.totalCost} TK\n` +
-              `*Net Balance: ${item.currentBalance} TK*\n\n` +
-              `View your detailed report here:\n${reportLink}\n\n` +
-              `_Thank you for using RiceManager._`;
+          const isDue = item.currentBalance < 0;
+          
+          const urgentNote = isDue 
+              ? `⚠️ *জরুরী নোটিশ:*\nআপনার মোট *${Math.abs(item.currentBalance)} টাকা* বকেয়া (Due) রয়েছে। দয়া করে অতি দ্রুত আপনার বকেয়া টাকা পরিশোধ করুন।`
+              : `✅ *STATUS: CLEAR*\nআপনার কোনো বকেয়া নেই।`;
+
+          const message = `📊 *Monthly Statement | ${monthName}*\n\n` +
+              `👤 *Name:* ${item.memberName}\n` +
+              `------------------------\n` +
+              `🍽️ *Total Meals:* ${item.totalMeals}\n` +
+              `💰 *Total Bill:* ${item.totalCost} TK\n` +
+              `💵 *${item.remainingDeposit < 0 ? 'Previous Due' : 'Total Deposit'}:* ${Math.abs(item.remainingDeposit)} TK\n` +
+              `------------------------\n` +
+              `📉 *Net Balance: ${item.currentBalance} TK*\n\n` +
+              `📄 *Download Full Invoice:*\n${reportLink}\n\n` +
+              `${urgentNote}`;
           
           const encodedMsg = encodeURIComponent(message);
           const phone = item.phone.startsWith('0') ? '88' + item.phone : item.phone;
@@ -214,7 +222,7 @@ export const Reports: React.FC = () => {
            <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden">
                <div className="relative z-10">
                    <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Total Bill</p>
-                   <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">৳{grandTotalCost.toLocaleString()}</div>
+                   <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">৳{grandTotalCost.toLocaleString()}</div>
                </div>
            </div>
 
@@ -269,7 +277,7 @@ export const Reports: React.FC = () => {
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalCost}</td>
                            <td className={`px-4 py-3 text-right font-bold ${item.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.currentBalance}</td>
                            <td className="px-4 py-3 text-center">
-                               <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-full transition-colors">
+                               <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full transition-colors">
                                    <Download className="h-4 w-4" />
                                </button>
                            </td>
@@ -317,7 +325,7 @@ export const Reports: React.FC = () => {
                      </div>
                      <div className="flex flex-col items-end">
                         <span className="text-[10px] uppercase font-bold text-slate-400">Total Bill</span>
-                        <strong className="text-indigo-600 dark:text-indigo-400 text-lg">{item.totalCost} ৳</strong>
+                        <strong className="text-emerald-600 dark:text-emerald-400 text-lg">{item.totalCost} ৳</strong>
                      </div>
                  </div>
 

@@ -178,21 +178,21 @@ export const Members: React.FC = () => {
 
         {/* Page Header */}
         <div className="flex-none mb-6 md:mb-10 bg-white dark:bg-slate-800/50 p-6 md:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
             <div className="relative z-10 flex items-center gap-4">
-                 <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-indigo-200 dark:shadow-none shrink-0">
+                 <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none shrink-0">
                      <UsersRound className="h-7 w-7 stroke-[2px]" />
                  </div>
                  <div>
                      <h2 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Members</h2>
                      <p className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">
-                        <span className="text-indigo-600 dark:text-indigo-400">{members.length}</span> ACTIVE MEMBERS
+                        <span className="text-emerald-600 dark:text-emerald-400">{members.length}</span> ACTIVE MEMBERS
                      </p>
                  </div>
             </div>
             
             {user && (
-                <Button onClick={() => openModal()} className="relative z-10 shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20 rounded-2xl px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 hover:-translate-y-0.5 transition-all w-full sm:w-auto flex items-center justify-center font-bold">
+                <Button onClick={() => openModal()} className="relative z-10 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 rounded-2xl px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all w-full sm:w-auto flex items-center justify-center font-bold">
                     <UserPlus className="h-5 w-5 stroke-[2.5px] mr-2" />
                     Add New Member
                 </Button>
@@ -204,7 +204,7 @@ export const Members: React.FC = () => {
         {loading ? (
           <div className="h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
-                  <div className="h-12 w-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+                  <div className="h-12 w-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
                   <p className="text-slate-400 font-bold text-sm uppercase tracking-widest animate-pulse">Loading members...</p>
               </div>
           </div>
@@ -215,83 +215,75 @@ export const Members: React.FC = () => {
               <p className="text-sm">Click "Add New Member" to get started.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6">
             {members.map(member => (
               <div 
                 key={member.id}
                 onClick={() => setViewMember(member)}
-                className="group relative bg-white dark:bg-slate-800 rounded-3xl p-6 border border-slate-100 dark:border-slate-700 shadow-sm hover:shadow-xl hover:shadow-indigo-100 dark:hover:shadow-none hover:-translate-y-1 transition-all duration-300 overflow-hidden cursor-pointer flex flex-col h-full"
+                className="group relative bg-white dark:bg-slate-800/80 rounded-[1.5rem] p-5 border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:shadow-emerald-500/5 dark:hover:bg-slate-800 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm flex flex-col justify-between h-full"
               >
-                {/* Background Glow Effect on Hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-50/50 to-transparent dark:from-indigo-900/10 dark:to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                {/* Subtle Background Accent */}
+                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none ${member.status === 'active' ? 'bg-emerald-500' : 'bg-slate-500'}`}></div>
 
-                {/* Status Indicator Bar */}
-                <div className={`absolute top-0 left-0 w-full h-1.5 transition-colors duration-300 ${member.status === 'active' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
-
-                <div className="relative z-10 flex flex-col h-full">
-                    <div className="flex items-start justify-between mb-4">
-                        {/* Circular Avatar */}
-                        <div className={`relative h-20 w-20 rounded-full flex items-center justify-center font-black text-3xl shrink-0 shadow-md border-4 ${member.status === 'active' ? 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 border-white dark:border-slate-800' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 border-white dark:border-slate-800'}`}>
+                <div className="relative z-10 flex gap-4">
+                    {/* Avatar */}
+                    <div className="relative shrink-0">
+                        <div className={`h-14 w-14 rounded-[1.25rem] flex items-center justify-center font-black text-2xl shadow-sm border transition-colors ${member.status === 'active' ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/30' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-700'}`}>
                             {member.photoBase64 ? (
-                                <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover rounded-full" />
+                                <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover rounded-[1.25rem]" />
                             ) : (
                                 member.fullName.charAt(0)
                             )}
-                            {/* Active Status Ring */}
-                            {member.status === 'active' && (
-                                <div className="absolute bottom-0 right-0 h-5 w-5 bg-emerald-500 rounded-full border-4 border-white dark:border-slate-800 shadow-sm"></div>
-                            )}
                         </div>
-                        
-                        {/* Action Dropdown Alternative / History Button */}
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); setViewMember(member); }}
-                            className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-full transition-colors"
-                            title="View Details"
-                        >
-                            <ChevronRight className="h-6 w-6 stroke-[2px] transition-transform group-hover:translate-x-1" />
-                        </button>
+                        {/* Status Dot */}
+                        <div className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-800 ${member.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
                     </div>
 
-                    <div className="flex-1">
-                        <h3 className="text-xl font-bold text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors line-clamp-1">{member.fullName}</h3>
-                        <div className="space-y-1.5 mt-2">
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                                <Phone className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{member.phone}</span>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0 flex flex-col justify-center">
+                        <div className="flex justify-between items-start">
+                            <h3 className="text-base font-bold text-slate-800 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate pr-2">
+                                {member.fullName}
+                            </h3>
+                            <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600 stroke-[2.5px] transition-transform group-hover:translate-x-1 shrink-0 mt-0.5" />
+                        </div>
+
+                        <div className="mt-1 space-y-0.5">
+                            <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+                                <Phone className="h-3 w-3 shrink-0" /> <span>{member.phone}</span>
                             </p>
                             {member.address && (
-                                <p className="text-sm font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                                    <MapPin className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{member.address}</span>
+                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+                                    <MapPin className="h-3 w-3 shrink-0" /> <span>{member.address}</span>
                                 </p>
                             )}
                         </div>
                     </div>
+                </div>
 
-                    {/* Action Bar */}
-                    <div className="mt-6 pt-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between gap-2">
-                        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${member.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-700/50 text-slate-500 dark:text-slate-400'}`}>
-                            {member.status}
-                        </div>
-
-                        {user && (
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); openModal(member, e); }}
-                                    className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
-                                    title="Edit Profile"
-                                >
-                                    <Edit3 className="h-4 w-4 stroke-[2.5px]" />
-                                </button>
-                                <button 
-                                    onClick={(e) => { e.stopPropagation(); initiateDelete(member, e); }}
-                                    className="p-2 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-xl transition-colors"
-                                    title="Delete Member"
-                                >
-                                    <Trash2 className="h-4 w-4 stroke-[2.5px]" />
-                                </button>
-                            </div>
-                        )}
+                <div className="relative z-10 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+                    <div className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${member.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
+                        {member.status}
                     </div>
+
+                    {user && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -my-2">
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); openModal(member, e); }}
+                                className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-colors"
+                                title="Edit Profile"
+                            >
+                                <Edit3 className="h-4 w-4 stroke-[2px]" />
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); initiateDelete(member, e); }}
+                                className="p-2 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-xl transition-colors"
+                                title="Delete Member"
+                            >
+                                <Trash2 className="h-4 w-4 stroke-[2px]" />
+                            </button>
+                        </div>
+                    )}
                 </div>
               </div>
             ))}
@@ -307,7 +299,7 @@ export const Members: React.FC = () => {
              
              {/* Header */}
              <div className="bg-slate-50 dark:bg-slate-800/50 px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 -mt-12 -mr-12 h-32 w-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                <div className="absolute top-0 right-0 -mt-12 -mr-12 h-32 w-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
                 <h3 className="text-xl font-bold text-slate-800 dark:text-white relative z-10">{selectedMemberId ? 'Edit Profile' : 'New Member'}</h3>
                 <button onClick={closeModal} className="p-2 bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-500 dark:text-slate-300 rounded-full transition-colors relative z-10 shadow-sm border border-slate-100 dark:border-slate-600">
                    <X className="h-4 w-4" />
@@ -352,10 +344,10 @@ export const Members: React.FC = () => {
                             required
                             value={formData.fullName}
                             onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-                            className="block px-5 pb-3 pt-6 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 peer transition-all shadow-sm"
+                            className="block px-5 pb-3 pt-6 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 peer transition-all shadow-sm"
                             placeholder=" "
                         />
-                        <label htmlFor="fullName" className="absolute text-sm text-slate-500 dark:text-slate-400 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-5 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-indigo-600 dark:peer-focus:text-indigo-400 font-bold pointer-events-none">Full Name</label>
+                        <label htmlFor="fullName" className="absolute text-sm text-slate-500 dark:text-slate-400 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-5 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-emerald-600 dark:peer-focus:text-emerald-400 font-bold pointer-events-none">Full Name</label>
                     </div>
 
                     {/* Floating Label: Phone */}
@@ -366,10 +358,10 @@ export const Members: React.FC = () => {
                             required
                             value={formData.phone}
                             onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                            className="block px-5 pb-3 pt-6 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 peer transition-all shadow-sm"
+                            className="block px-5 pb-3 pt-6 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 peer transition-all shadow-sm"
                             placeholder=" "
                         />
-                        <label htmlFor="phone" className="absolute text-sm text-slate-500 dark:text-slate-400 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-5 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-indigo-600 dark:peer-focus:text-indigo-400 font-bold pointer-events-none">Phone Number</label>
+                        <label htmlFor="phone" className="absolute text-sm text-slate-500 dark:text-slate-400 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-5 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-emerald-600 dark:peer-focus:text-emerald-400 font-bold pointer-events-none">Phone Number</label>
                     </div>
 
                     {/* Floating Label: Address */}
@@ -379,10 +371,10 @@ export const Members: React.FC = () => {
                             id="address"
                             value={formData.address}
                             onChange={(e) => setFormData({...formData, address: e.target.value})}
-                            className="block px-5 pb-3 pt-6 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 peer transition-all shadow-sm"
+                            className="block px-5 pb-3 pt-6 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 peer transition-all shadow-sm"
                             placeholder=" "
                         />
-                        <label htmlFor="address" className="absolute text-sm text-slate-500 dark:text-slate-400 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-5 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-indigo-600 dark:peer-focus:text-indigo-400 font-bold pointer-events-none">Address (Optional)</label>
+                        <label htmlFor="address" className="absolute text-sm text-slate-500 dark:text-slate-400 duration-300 transform -translate-y-3 scale-75 top-4 z-10 origin-[0] left-5 peer-placeholder-shown:scale-100 peer-placeholder-shown:translate-y-0 peer-focus:scale-75 peer-focus:-translate-y-3 peer-focus:text-emerald-600 dark:peer-focus:text-emerald-400 font-bold pointer-events-none">Address (Optional)</label>
                     </div>
 
                     {/* Select Status */}
@@ -390,7 +382,7 @@ export const Members: React.FC = () => {
                         <select 
                             value={formData.status} 
                             onChange={(e) => setFormData({...formData, status: e.target.value as any})}
-                            className="block px-5 py-4 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all shadow-sm"
+                            className="block px-5 py-4 w-full text-base font-bold text-slate-900 dark:text-white bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 appearance-none focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 transition-all shadow-sm"
                         >
                             <option value="active">Active Member</option>
                             <option value="inactive">Inactive</option>
@@ -401,7 +393,7 @@ export const Members: React.FC = () => {
                     </div>
 
                     <div className="pt-4">
-                        <Button type="submit" className="w-full py-4 rounded-2xl shadow-xl shadow-indigo-200 dark:shadow-indigo-900/20 text-base font-bold transition-transform hover:-translate-y-0.5">
+                        <Button type="submit" className="w-full py-4 rounded-2xl shadow-xl shadow-emerald-200 dark:shadow-emerald-900/20 text-base font-bold transition-transform hover:-translate-y-0.5">
                             <CheckCircle2 className="h-5 w-5 mr-2 stroke-[2.5px]" /> Save Member
                         </Button>
                     </div>

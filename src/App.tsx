@@ -16,6 +16,7 @@ const Reports = React.lazy(() => import('./pages/Reports').then(m => ({ default:
 const Settings = React.lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
 const Money = React.lazy(() => import('./pages/Money').then(m => ({ default: m.Money })));
 const ViewReport = React.lazy(() => import('./pages/ViewReport').then(m => ({ default: m.ViewReport })));
+const Accounting = React.lazy(() => import('./pages/Accounting').then(m => ({ default: m.Accounting })));
 
 // Protected Route Wrapper (Only for Admin pages like Settings)
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -38,7 +39,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 const LoadingFallback = () => (
   <div className="flex h-full items-center justify-center">
-    <div className="h-12 w-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin"></div>
+    <div className="h-12 w-12 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
   </div>
 );
 
@@ -67,6 +68,7 @@ const App: React.FC = () => {
               <Route path="/money" element={<Money />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/view-report" element={<ViewReport />} />
+              <Route path="/accounting" element={<Accounting />} />
               
               {/* Protected Routes (Admin Only) */}
               <Route path="/settings" element={

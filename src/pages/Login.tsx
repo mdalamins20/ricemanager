@@ -13,9 +13,6 @@ export const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  
-  // Setup Mode State
-  const [isSetupMode, setIsSetupMode] = useState(false);
 
   const navigate = useNavigate();
 
@@ -26,60 +23,37 @@ export const Login: React.FC = () => {
     setSuccessMsg('');
 
     try {
-      if (isSetupMode) {
-        // Create Admin Account
-        await auth.createUserWithEmailAndPassword(email, password);
-        await logAction('System Setup', 'Created new admin account');
-        setSuccessMsg("Admin account created! You can now initialize the database.");
-      } else {
-        // Normal Login
-        await auth.signInWithEmailAndPassword(email, password);
-        await logAction('Login', 'User signed in successfully');
-        navigate('/');
-      }
+      // Normal Login
+      await auth.signInWithEmailAndPassword(email, password);
+      await logAction('Login', 'User signed in successfully');
+      navigate('/');
     } catch (err: any) {
       console.error(err);
-      if (err.code === 'auth/email-already-in-use') {
-        setError('This email is already registered. Please login.');
-      } else {
-        setError('Authentication failed. Check credentials.');
-      }
+      setError('Authentication failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDbInit = async () => {
-    setLoading(true);
-    const result = await seedDatabase();
-    setLoading(false);
-    if (result.success) {
-      setSuccessMsg(result.message);
-      logAction('Database Seed', 'Initialized default database structure');
-      // Optional: Automatically switch to login mode after success
-      setTimeout(() => {
-        setIsSetupMode(false);
-        setError('');
-      }, 2000);
-    } else {
-      setError(result.message);
-    }
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-4 font-inter transition-colors duration-300">
-      <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-2xl shadow-slate-200/50 dark:shadow-none w-full max-w-md border border-slate-100 dark:border-slate-800 relative overflow-hidden">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 p-4 font-inter transition-colors duration-300 relative overflow-hidden">
+      
+      {/* Background Ornaments */}
+      <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
+
+      <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl p-8 sm:p-10 rounded-[2.5rem] shadow-2xl shadow-emerald-500/5 dark:shadow-none w-full max-w-md border border-white dark:border-slate-800 relative z-10 animate-in zoom-in-95 duration-500 fade-in">
         
         {/* Header */}
-        <div className="flex flex-col items-center mb-8 relative z-10">
-          <div className={`p-4 rounded-2xl mb-5 shadow-lg transition-all duration-300 ${isSetupMode ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-200 dark:shadow-blue-900/20' : 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white shadow-indigo-200 dark:shadow-indigo-900/20'}`}>
-            {isSetupMode ? <Database className="h-8 w-8 stroke-[1.5px]" /> : <ChefHat className="h-8 w-8 stroke-[1.5px]" />}
+        <div className="flex flex-col items-center mb-10 text-center">
+          <div className="h-16 w-16 rounded-2xl mb-6 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-lg shadow-emerald-500/30 flex items-center justify-center transform -rotate-6 hover:rotate-0 transition-transform duration-300">
+            <Lock className="h-8 w-8 stroke-[2px]" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            {isSetupMode ? 'System Setup' : 'Admin Portal'}
+          <h1 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight mb-2">
+            Admin Login
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            {isSetupMode ? 'Create admin & initialize data' : 'Sign in to manage rice meals'}
+          <p className="text-slate-500 dark:text-slate-400 text-sm font-medium px-4">
+            Welcome back! Please enter your details to securely manage your mess.
           </p>
         </div>
 
@@ -94,7 +68,7 @@ export const Login: React.FC = () => {
         )}
 
         {error && (
-          <div className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 p-4 rounded-xl mb-6 text-sm text-center border border-indigo-100 dark:border-indigo-900/40 font-medium relative z-10 animate-in fade-in slide-in-from-top-2 flex items-center justify-center gap-2">
+          <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 p-4 rounded-xl mb-6 text-sm text-center border border-emerald-100 dark:border-emerald-900/40 font-medium relative z-10 animate-in fade-in slide-in-from-top-2 flex items-center justify-center gap-2">
             <AlertTriangle className="h-4 w-4" /> {error}
           </div>
         )}
@@ -106,27 +80,27 @@ export const Login: React.FC = () => {
         )}
 
         {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-5 relative z-10">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 ml-1">Email Address</label>
+        <form onSubmit={handleLogin} className="space-y-6 relative z-10">
+          <div className="space-y-2">
+            <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest ml-1">Email Address</label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-base text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
+              className="w-full px-5 py-4 bg-slate-50/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-medium"
               placeholder="admin@example.com"
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1.5 ml-1">Password</label>
+          <div className="space-y-2">
+            <label className="block text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest ml-1">Password</label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all text-base text-slate-900 dark:text-white placeholder:text-slate-400 font-medium"
+              className="w-full px-5 py-4 bg-slate-50/50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none transition-all text-sm font-bold text-slate-900 dark:text-white placeholder:text-slate-400 placeholder:font-medium"
               placeholder="••••••••"
               minLength={6}
             />
@@ -135,48 +109,13 @@ export const Login: React.FC = () => {
           <Button 
             type="submit" 
             isLoading={loading} 
-            className={`w-full justify-center py-3.5 text-lg rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98] ${isSetupMode ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-200 dark:shadow-none' : 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 shadow-lg shadow-indigo-200 dark:shadow-none'}`}
+            className="w-full justify-center py-4 text-base font-bold rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 shadow-xl shadow-emerald-500/20 dark:shadow-emerald-900/20 text-white border-0 mt-2"
           >
-            {isSetupMode ? 'Create Admin Account' : <span className="flex items-center gap-2"><Lock className="h-4 w-4" /> Sign In</span>}
+            <span className="flex items-center gap-2">Sign In <ArrowRight className="h-4 w-4" /></span>
           </Button>
         </form>
 
-        {/* Setup Actions */}
-        {isSetupMode && (
-          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 relative z-10">
-             <Button 
-               type="button" 
-               variant="secondary" 
-               onClick={handleDbInit} 
-               isLoading={loading}
-               className="w-full justify-center py-3 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
-             >
-               <Database className="h-4 w-4" /> Initialize Database Structure
-             </Button>
-             <p className="text-xs text-center text-slate-400 dark:text-slate-500 mt-2">
-               *Click this to create default settings and collections automatically.
-             </p>
-          </div>
-        )}
 
-        {/* Toggle Mode */}
-        <div className="mt-8 text-center relative z-10">
-          <button 
-            type="button"
-            onClick={() => {
-              setIsSetupMode(!isSetupMode);
-              setError('');
-              setSuccessMsg('');
-            }}
-            className="text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors flex items-center justify-center gap-1.5 mx-auto py-2 px-4 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800"
-          >
-            {isSetupMode ? (
-              <>Back to Login <ArrowRight className="h-3 w-3 stroke-[2.5px]" /></>
-            ) : (
-              <><ShieldCheck className="h-4 w-4" /> First time setup?</>
-            )}
-          </button>
-        </div>
 
       </div>
     </div>

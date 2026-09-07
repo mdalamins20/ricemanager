@@ -78,7 +78,7 @@ export const InstallPWA: React.FC<{ className?: string, showIconOnly?: boolean }
                  </ol>
              </div>
 
-             <button onClick={() => setShowIOSInstructions(false)} className="mt-6 w-full py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-lg shadow-indigo-200">
+             <button onClick={() => setShowIOSInstructions(false)} className="mt-6 w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-200">
                Got it
              </button>
           </div>

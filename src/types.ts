@@ -55,3 +55,11 @@ export interface LogEntry {
   performedBy: string; // Email or 'System'
   timestamp: string;
 }
+
+export interface VendorPayment {
+  id: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  note?: string;
+  createdAt: string;
+}
