@@ -39,17 +39,29 @@ export const generatePDF = async (item: MemberReport, selectedMonth: string): Pr
   try {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
-    img.src = '/logo.png';
-    await new Promise((resolve, reject) => {
+    const loadPromise = new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = reject;
     });
+    img.src = '/logo.png';
+    await loadPromise;
     const canvas = document.createElement('canvas');
-    canvas.width = img.width;
-    canvas.height = img.height;
+    
+    // Resize image to prevent massive base64 strings
+    const MAX_SIZE = 150;
+    let width = img.width;
+    let height = img.height;
+    if (width > MAX_SIZE || height > MAX_SIZE) {
+       const ratio = Math.min(MAX_SIZE / width, MAX_SIZE / height);
+       width = width * ratio;
+       height = height * ratio;
+    }
+    
+    canvas.width = width;
+    canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (ctx) {
-      ctx.drawImage(img, 0, 0);
+      ctx.drawImage(img, 0, 0, width, height);
       logoDataUrl = canvas.toDataURL('image/png');
     }
   } catch (e) {

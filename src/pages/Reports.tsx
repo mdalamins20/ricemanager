@@ -126,18 +126,22 @@ export const Reports: React.FC = () => {
           const isDue = item.currentBalance < 0;
           
           const urgentNote = isDue 
-              ? `⚠️ *জরুরী নোটিশ:*\nআপনার মোট *${Math.abs(item.currentBalance)} টাকা* বকেয়া (Due) রয়েছে। দয়া করে অতি দ্রুত আপনার বকেয়া টাকা পরিশোধ করুন।`
-              : `✅ *STATUS: CLEAR*\nআপনার কোনো বকেয়া নেই।`;
+              ? `*[ জরুরী নোটিশ ]*\nআপনার মোট ${Math.abs(item.currentBalance)} টাকা বকেয়া (Due) রয়েছে। দয়া করে অতি দ্রুত আপনার বকেয়া টাকা পরিশোধ করুন।`
+              : `*[ STATUS: CLEAR ]*\nআপনার কোনো বকেয়া নেই।`;
 
-          const message = `📊 *Monthly Statement | ${monthName}*\n\n` +
-              `👤 *Name:* ${item.memberName}\n` +
+          const currentDeposit = item.advanceDeposit + item.finalDeposit;
+          const prevText = item.prevBalance < 0 ? 'Prev. Due:' : 'Prev. Balance:';
+
+          const message = `*MONTHLY STATEMENT | ${monthName.toUpperCase()}*\n\n` +
+              `*Name:* ${item.memberName}\n` +
               `------------------------\n` +
-              `🍽️ *Total Meals:* ${item.totalMeals}\n` +
-              `💰 *Total Bill:* ${item.totalCost} TK\n` +
-              `💵 *${item.remainingDeposit < 0 ? 'Previous Due' : 'Total Deposit'}:* ${Math.abs(item.remainingDeposit)} TK\n` +
+              `• Total Meals:   ${item.totalMeals}\n` +
+              `• Total Bill:    ${item.totalCost} TK\n` +
+              `• ${prevText.padEnd(14)} ${Math.abs(item.prevBalance)} TK\n` +
+              `• Curr. Deposit: ${currentDeposit} TK\n` +
               `------------------------\n` +
-              `📉 *Net Balance: ${item.currentBalance} TK*\n\n` +
-              `📄 *Download Full Invoice:*\n${reportLink}\n\n` +
+              `*Net Balance:  ${item.currentBalance} TK*\n\n` +
+              `*Download Full Invoice:*\n${reportLink}\n\n` +
               `${urgentNote}`;
           
           const encodedMsg = encodeURIComponent(message);
