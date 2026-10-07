@@ -23,6 +23,19 @@ export const Settings: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const notifyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (notifyTimeoutRef.current) clearTimeout(notifyTimeoutRef.current);
+    };
+  }, []);
+
+  const triggerNotification = (type: 'success' | 'error', message: string) => {
+    if (notifyTimeoutRef.current) clearTimeout(notifyTimeoutRef.current);
+    setNotification({ type, message });
+    notifyTimeoutRef.current = setTimeout(() => setNotification(null), 3000);
+  };
   
   // Danger Zone specific
   const [resetConfirm, setResetConfirm] = useState('');
@@ -129,8 +142,7 @@ export const Settings: React.FC = () => {
           });
           await batch.commit();
           await logAction('Settings', 'Updated auto meal preferences');
-          setNotification({ type: 'success', message: 'Auto meal settings saved successfully!' });
-          setTimeout(() => setNotification(null), 3000);
+          triggerNotification('success', 'Auto meal settings saved successfully!');
       } catch (err) {
           console.error(err);
           setNotification({ type: 'error', message: 'Failed to save auto meal settings.' });
@@ -204,20 +216,20 @@ export const Settings: React.FC = () => {
       {/* Settings Navigation Sidebar */}
       <div className="flex-none md:w-72 flex flex-col gap-2">
          {/* Page Header */}
-         <div className="mb-4 md:mb-8 bg-white dark:bg-slate-800 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden">
+         <div className="mb-3 md:mb-8 bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm relative overflow-hidden">
              <div className="absolute top-0 right-0 -mt-10 -mr-10 h-32 w-32 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
-             <div className="relative z-10 flex items-center gap-4">
-                 <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none shrink-0">
-                     <SettingsIcon className="h-6 w-6 stroke-[2px]" />
+             <div className="relative z-10 flex items-center gap-3.5 sm:gap-4">
+                 <div className="h-11 w-11 sm:h-12 sm:w-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none shrink-0">
+                     <SettingsIcon className="h-5 w-5 sm:h-6 sm:w-6 stroke-[2px]" />
                  </div>
                  <div>
-                     <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">Settings</h2>
-                     <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">Preferences</p>
+                     <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-white tracking-tight">Settings</h2>
+                     <p className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">System Preferences</p>
                  </div>
              </div>
          </div>
 
-         {/* Navigation Pills */}
+         {/* Navigation Pills - Mobile Segmented Row / Desktop Vertical Sidebar */}
          <div className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible no-scrollbar pb-2 md:pb-0">
             {tabs.map(tab => {
                 const isActive = activeTab === tab.id;
@@ -225,22 +237,22 @@ export const Settings: React.FC = () => {
                 <button 
                   key={tab.id}
                   onClick={() => { setActiveTab(tab.id as Tab); setNotification(null); }}
-                  className={`flex items-center gap-4 p-4 rounded-2xl transition-all duration-200 text-left shrink-0 md:shrink border ${
+                  className={`flex items-center gap-2.5 md:gap-4 px-3.5 py-2.5 md:p-4 rounded-xl md:rounded-2xl transition-all duration-200 text-left shrink-0 md:shrink border active:scale-95 ${
                       isActive 
-                      ? 'bg-white dark:bg-slate-800 shadow-sm border-emerald-100 dark:border-slate-600 md:translate-x-1' 
-                      : 'bg-transparent border-transparent text-slate-600 dark:text-slate-400 hover:bg-white/50 dark:hover:bg-slate-800/50 hover:text-emerald-600 dark:hover:text-emerald-400'
+                      ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/20 md:bg-white md:dark:bg-slate-800 md:text-slate-800 md:dark:text-white md:border-emerald-100 md:dark:border-slate-600 md:translate-x-1' 
+                      : 'bg-white/80 dark:bg-slate-800/80 border-slate-200/50 dark:border-slate-700/50 text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400'
                   }`}
                 >
-                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200 ${
+                    <div className={`h-8 w-8 md:h-10 md:w-10 rounded-lg md:rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200 ${
                         isActive
-                        ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-slate-100 dark:bg-slate-700'
+                        ? 'bg-white/20 text-white md:bg-emerald-50 md:dark:bg-emerald-900/30 md:text-emerald-600 md:dark:text-emerald-400'
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                     }`}>
-                        <tab.icon className={`h-5 w-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-[1.5px]'}`} />
+                        <tab.icon className={`h-4 w-4 md:h-5 md:w-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-[1.5px]'}`} />
                     </div>
-                    <div className="hidden md:block pr-2">
-                        <h4 className={`font-bold text-sm tracking-wide ${isActive ? 'text-slate-800 dark:text-white' : ''}`}>{tab.label}</h4>
-                        <p className={`text-[11px] font-medium mt-0.5 ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>{tab.desc}</p>
+                    <div>
+                        <h4 className={`font-bold text-xs md:text-sm tracking-wide ${isActive ? 'text-white md:text-slate-800 md:dark:text-white' : ''}`}>{tab.label}</h4>
+                        <p className={`hidden md:block text-[11px] font-medium mt-0.5 ${isActive ? 'text-slate-500' : 'text-slate-400'}`}>{tab.desc}</p>
                     </div>
                 </button>
             )})}
@@ -249,7 +261,7 @@ export const Settings: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-800 rounded-[2rem] border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden relative">
-          <div className="flex-1 overflow-y-auto no-scrollbar p-6 md:p-10 relative">
+          <div className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-6 md:p-10 relative pb-28 md:pb-10">
             
             {/* --- GENERAL TAB --- */}
             {activeTab === 'general' && (

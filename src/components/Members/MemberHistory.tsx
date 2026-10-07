@@ -1,62 +1,90 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Member } from '../../types';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
-import { X, Calendar, SunMedium, MoonStar } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO } from 'date-fns';
+import { 
+  X, Calendar, SunMedium, MoonStar, Phone, MessageCircle, 
+  Utensils, Wallet, TrendingUp, TrendingDown,
+  ChevronLeft, ChevronRight
+} from 'lucide-react';
 import { useMeals, useDeposits, useSettings } from '../../contexts';
+import { MonthPicker } from '../MonthPicker';
 
-export const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = ({ member, onClose }) => {
-  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
-  const [loading, setLoading] = useState(true);
-  const [history, setHistory] = useState<{
-    days: { date: Date; lunch: boolean; dinner: boolean; guestLunch: number; guestDinner: number; cost: number }[];
-    monthTotalMeals: number;
-    monthTotalCost: number;
-    monthDeposit: number;
-    netBalance: number;
-  }>({ days: [], monthTotalMeals: 0, monthTotalCost: 0, monthDeposit: 0, netBalance: 0 });
-  
-  const [mealPrice, setMealPrice] = useState(65);
+interface MemberHistoryProps {
+  member: Member;
+  initialMonth?: string;
+  onClose: () => void;
+}
 
-  const { allMeals } = useMeals();
-  const { allDeposits } = useDeposits();
+export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMonth, onClose }) => {
+  const [selectedMonth, setSelectedMonth] = useState(initialMonth || format(new Date(), 'yyyy-MM'));
+  const [filterType, setFilterType] = useState<'all' | 'meals' | 'off'>('all');
+
+  const { allMeals, loading: mealsLoading } = useMeals();
+  const { allDeposits, loading: depositsLoading } = useDeposits();
   const { settings, loading: settingsLoading } = useSettings();
-  const { loading: mealsLoading } = useMeals();
-  const dataLoading = settingsLoading || mealsLoading;
+  const dataLoading = settingsLoading || mealsLoading || depositsLoading;
+
+  const currentPrice = settings?.mealPrice || 65;
+
+  // Month navigation helpers
+  const handlePrevMonth = () => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const prevDate = new Date(y, m - 2, 1);
+    setSelectedMonth(format(prevDate, 'yyyy-MM'));
+  };
+
+  const handleNextMonth = () => {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const nextDate = new Date(y, m, 1);
+    setSelectedMonth(format(nextDate, 'yyyy-MM'));
+  };
 
   const historyData = useMemo(() => {
     if (dataLoading) return null;
-    const currentPrice = settings?.mealPrice || 65;
-
-    const memberDeposits = allDeposits.filter(d => d.memberId === member.id);
-
-    let totalLifetimeMeals = 0;
-    let totalLifetimeDeposit = memberDeposits.reduce((sum, d) => sum + d.amount, 0);
-
-    allMeals.forEach(m => {
-      const entry = m.entries?.[member.id];
-      if (entry) {
-        if (entry.lunch) totalLifetimeMeals++;
-        if (entry.dinner) totalLifetimeMeals++;
-        if (entry.guestLunch) totalLifetimeMeals += entry.guestLunch;
-        if (entry.guestDinner) totalLifetimeMeals += entry.guestDinner;
-      }
-    });
-    
-    const netBalance = totalLifetimeDeposit - (totalLifetimeMeals * currentPrice);
 
     const [year, month] = selectedMonth.split('-').map(Number);
     const startDate = startOfMonth(new Date(year, month - 1));
     const endDate = endOfMonth(new Date(year, month - 1));
+    const startStr = format(startDate, 'yyyy-MM-dd');
     const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
 
-    let monthMealsCount = 0;
-    let monthDepositAmount = 0;
-
-    memberDeposits.forEach(d => {
-       if (d.date.startsWith(selectedMonth)) {
-         monthDepositAmount += d.amount;
-       }
+    // 1. Previous Balance (before this month)
+    let prevDeposits = 0;
+    let prevMeals = 0;
+    allDeposits.forEach(d => {
+      if (d.memberId === member.id && d.date < startStr) {
+        prevDeposits += d.amount;
+      }
     });
+    allMeals.forEach(mDoc => {
+      if (mDoc.date < startStr) {
+        const entry = mDoc.entries?.[member.id];
+        if (entry) {
+          if (entry.lunch) prevMeals++;
+          if (entry.dinner) prevMeals++;
+          prevMeals += Number(entry.guestLunch) || 0;
+          prevMeals += Number(entry.guestDinner) || 0;
+        }
+      }
+    });
+    const prevBalance = prevDeposits - (prevMeals * currentPrice);
+
+    // 2. Current Month Deposits
+    let monthAdvance = 0;
+    let monthFinal = 0;
+    allDeposits.forEach(d => {
+      if (d.memberId === member.id && d.date.startsWith(selectedMonth)) {
+        if (d.type === 'final') monthFinal += d.amount;
+        else monthAdvance += d.amount;
+      }
+    });
+    const totalMonthDeposit = monthAdvance + monthFinal;
+
+    // 3. Current Month Meals & Daily Logs
+    let monthLunch = 0;
+    let monthDinner = 0;
+    let monthGuest = 0;
+    let monthMealsCount = 0;
 
     const dailyData = daysInMonth.map(day => {
       const dateStr = format(day, 'yyyy-MM-dd');
@@ -68,145 +96,356 @@ export const MemberHistory: React.FC<{ member: Member; onClose: () => void }> = 
 
       if (mealDoc && mealDoc.entries?.[member.id]) {
         const entry = mealDoc.entries[member.id];
-        lunch = entry.lunch;
-        dinner = entry.dinner;
-        guestLunch = entry.guestLunch || 0;
-        guestDinner = entry.guestDinner || 0;
+        lunch = Boolean(entry.lunch);
+        dinner = Boolean(entry.dinner);
+        guestLunch = Number(entry.guestLunch) || 0;
+        guestDinner = Number(entry.guestDinner) || 0;
       }
 
-      const dailyTotal = (lunch ? 1 : 0) + (dinner ? 1 : 0) + guestLunch + guestDinner;
+      const guestTotal = guestLunch + guestDinner;
+      const dailyTotal = (lunch ? 1 : 0) + (dinner ? 1 : 0) + guestTotal;
+
+      if (lunch) monthLunch++;
+      if (dinner) monthDinner++;
+      monthGuest += guestTotal;
       monthMealsCount += dailyTotal;
 
       return {
         date: day,
+        dateStr,
         lunch,
         dinner,
         guestLunch,
         guestDinner,
+        guestTotal,
+        dailyTotal,
         cost: dailyTotal * currentPrice
       };
     });
 
-    return {
-      days: dailyData,
-      monthTotalMeals: monthMealsCount,
-      monthTotalCost: monthMealsCount * currentPrice,
-      monthDeposit: monthDepositAmount,
-      netBalance,
-      mealPrice: currentPrice
-    };
-  }, [selectedMonth, member.id, allMeals, allDeposits, settings, dataLoading]);
+    const monthTotalCost = monthMealsCount * currentPrice;
+    const availableFunds = prevBalance + totalMonthDeposit;
+    const monthClosingBalance = availableFunds - monthTotalCost;
 
-  useEffect(() => {
-    if (historyData) {
-      setHistory({
-        days: historyData.days,
-        monthTotalMeals: historyData.monthTotalMeals,
-        monthTotalCost: historyData.monthTotalCost,
-        monthDeposit: historyData.monthDeposit,
-        netBalance: historyData.netBalance
-      });
-      setMealPrice(historyData.mealPrice);
-      setLoading(false);
+    return {
+      prevBalance,
+      monthAdvance,
+      monthFinal,
+      totalMonthDeposit,
+      monthLunch,
+      monthDinner,
+      monthGuest,
+      monthMealsCount,
+      monthTotalCost,
+      monthClosingBalance,
+      dailyData
+    };
+  }, [selectedMonth, member.id, allMeals, allDeposits, currentPrice, dataLoading]);
+
+  // Filter daily list
+  const filteredDays = useMemo(() => {
+    if (!historyData) return [];
+    if (filterType === 'meals') {
+      return historyData.dailyData.filter(d => d.dailyTotal > 0);
     }
+    if (filterType === 'off') {
+      return historyData.dailyData.filter(d => d.dailyTotal === 0);
+    }
+    return historyData.dailyData;
+  }, [historyData, filterType]);
+
+  const activeDaysCount = useMemo(() => {
+    return historyData?.dailyData.filter(d => d.dailyTotal > 0).length || 0;
   }, [historyData]);
 
+  const offDaysCount = useMemo(() => {
+    return historyData?.dailyData.filter(d => d.dailyTotal === 0).length || 0;
+  }, [historyData]);
+
+  const isDue = (historyData?.monthClosingBalance || 0) < 0;
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-end md:items-center justify-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm transition-opacity" onClick={onClose} />
-      <div className="bg-white dark:bg-slate-900 w-full h-[95vh] md:h-[90vh] md:max-w-4xl rounded-t-3xl md:rounded-3xl flex flex-col relative z-10 animate-in slide-in-from-bottom duration-300 shadow-2xl">
-        
-        {/* Header */}
-        <div className="p-4 md:p-6 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50 rounded-t-3xl md:rounded-t-3xl">
-          <div className="flex items-center gap-3">
-             <div className="h-10 w-10 rounded-full bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg font-bold overflow-hidden shrink-0">
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div 
+        className="w-full sm:max-w-2xl lg:max-w-3xl bg-slate-100 dark:bg-slate-900 rounded-t-[2rem] sm:rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300"
+      >
+        {/* Modal Top Header */}
+        <div className="flex-none bg-white dark:bg-slate-900 px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          {/* Member Profile */}
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="relative shrink-0">
+              <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white text-xl font-black shadow-md shadow-emerald-500/10 overflow-hidden border-2 border-white dark:border-slate-800">
                 {member.photoBase64 ? (
-                   <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover" />
+                  <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover" />
                 ) : (
-                   member.fullName.charAt(0)
+                  member.fullName.charAt(0)
                 )}
-             </div>
-             <div>
-                <h2 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-white leading-tight">{member.fullName}</h2>
-                <p className="text-slate-500 dark:text-slate-400 text-xs md:text-sm">{member.phone}</p>
-             </div>
+              </div>
+              <span className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-900 ${member.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></span>
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
+                  {member.fullName}
+                </h3>
+                <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${member.status === 'active' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30'}`}>
+                  {member.status}
+                </span>
+              </div>
+              
+              <div className="flex items-center gap-2 mt-0.5">
+                {member.phone && (
+                  <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1 font-semibold">
+                    <Phone className="h-3 w-3 text-emerald-500" />
+                    <span>{member.phone}</span>
+                  </p>
+                )}
+                {member.phone && (
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <a 
+                      href={`tel:${member.phone}`} 
+                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                      title="Call"
+                    >
+                      <Phone className="h-3 w-3" />
+                    </a>
+                    <a 
+                      href={`https://wa.me/${member.phone.startsWith('0') ? '88' + member.phone : member.phone}`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
+                      title="WhatsApp"
+                    >
+                      <MessageCircle className="h-3 w-3" />
+                    </a>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-500 transition-colors">
+
+          {/* Close Button */}
+          <button 
+            onClick={onClose}
+            className="p-2 sm:p-2.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all"
+            title="Close"
+          >
             <X className="h-5 w-5 stroke-[2.5px]" />
           </button>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6">
-          <div className="flex flex-col gap-4 mb-6">
-             <div className="flex items-center justify-between bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 shadow-sm">
-                <div className="flex items-center gap-2">
-                   <Calendar className="h-4 w-4 text-slate-400" />
-                   <input 
-                    type="month" 
-                    value={selectedMonth} 
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="outline-none text-slate-800 dark:text-white font-bold bg-transparent text-sm cursor-pointer"
-                  />
-                </div>
-                <div className={`px-3 py-1 rounded-lg font-bold text-sm ${history.netBalance >= 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-500'}`}>
-                   Net: {history.netBalance >= 0 ? '+' : ''}{history.netBalance} ৳
-                </div>
-             </div>
-
-             {/* Stats Grid */}
-             <div className="grid grid-cols-2 gap-3">
-                <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-xl border border-orange-100 dark:border-orange-900/40">
-                  <p className="text-[10px] font-bold text-orange-400 uppercase tracking-wider mb-1">Total Meals</p>
-                  <div className="text-xl font-bold text-orange-700 dark:text-orange-400">{history.monthTotalMeals}</div>
-                </div>
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/40">
-                   <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider mb-1">Cost</p>
-                   <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">৳{history.monthTotalCost}</div>
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl border border-blue-100 dark:border-blue-900/40">
-                   <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Deposit</p>
-                   <div className="text-xl font-bold text-blue-700 dark:text-blue-400">৳{history.monthDeposit}</div>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Status</p>
-                   <div className="text-lg font-bold text-slate-700 dark:text-slate-300">{member.status.toUpperCase()}</div>
-                </div>
-             </div>
+        {/* Month Selector Bar */}
+        <div className="flex-none px-5 sm:px-6 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
+          <div className="text-right">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Rate / Meal</span>
+            <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{currentPrice} BDT</span>
           </div>
+        </div>
 
-          {/* Daily List */}
-          <div className="space-y-2">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Daily Breakdown</h3>
-            {history.days.map((day) => (
-              <div key={day.date.toISOString()} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                 <div className="flex flex-col">
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">{format(day.date, 'dd MMM')}</span>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">{format(day.date, 'EEEE')}</span>
-                 </div>
-                 <div className="flex items-center gap-2">
-                    {/* Lunch */}
-                    <div className="flex flex-col items-center gap-1">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border ${day.lunch ? 'bg-amber-100 border-amber-200 text-amber-600 dark:bg-amber-900/20 dark:border-amber-800' : 'bg-slate-50 border-slate-100 text-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-500'}`}>
-                        <SunMedium className="h-3 w-3" />
-                        </div>
-                        {day.guestLunch > 0 && <span className="text-[8px] font-bold text-amber-600">G:{day.guestLunch}</span>}
-                    </div>
-                    {/* Dinner */}
-                    <div className="flex flex-col items-center gap-1">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center border ${day.dinner ? 'bg-emerald-100 border-emerald-200 text-emerald-600 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-slate-50 border-slate-100 text-slate-300 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-500'}`}>
-                        <MoonStar className="h-3 w-3" />
-                        </div>
-                        {day.guestDinner > 0 && <span className="text-[8px] font-bold text-emerald-600">G:{day.guestDinner}</span>}
-                    </div>
-                 </div>
-                 <div className="text-sm font-bold text-slate-700 dark:text-slate-300 w-12 text-right">
-                    ৳{day.cost}
-                 </div>
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-4 space-y-4 no-scrollbar">
+          {/* Main KPI Stats Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+            {/* Total Meals */}
+            <div className="bg-white dark:bg-slate-800/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Meals</span>
+                <Utensils className="h-3.5 w-3.5 text-emerald-500" />
               </div>
-            ))}
+              <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white">
+                {historyData?.monthMealsCount || 0}
+              </div>
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                L: {historyData?.monthLunch || 0} | D: {historyData?.monthDinner || 0}
+                {(historyData?.monthGuest || 0) > 0 && ` | G: ${historyData?.monthGuest}`}
+              </div>
+            </div>
+
+            {/* Total Cost */}
+            <div className="bg-white dark:bg-slate-800/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Meal Cost</span>
+                <TrendingDown className="h-3.5 w-3.5 text-rose-500" />
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-rose-600 dark:text-rose-400">
+                ৳{(historyData?.monthTotalCost || 0).toLocaleString()}
+              </div>
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">
+                {(historyData?.monthMealsCount || 0)} × {currentPrice} BDT
+              </div>
+            </div>
+
+            {/* Total Deposits */}
+            <div className="bg-white dark:bg-slate-800/90 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 shadow-sm relative overflow-hidden">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Deposits</span>
+                <Wallet className="h-3.5 w-3.5 text-blue-500" />
+              </div>
+              <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">
+                ৳{(historyData?.totalMonthDeposit || 0).toLocaleString()}
+              </div>
+              <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                Adv: {historyData?.monthAdvance || 0} | Final: {historyData?.monthFinal || 0}
+              </div>
+            </div>
+
+            {/* Net Closing Balance */}
+            <div className={`p-3.5 rounded-2xl border shadow-sm relative overflow-hidden ${isDue ? 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60' : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/60'}`}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  {isDue ? 'Net Due' : 'Net Surplus'}
+                </span>
+                {isDue ? <TrendingDown className="h-3.5 w-3.5 text-rose-500" /> : <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />}
+              </div>
+              <div className={`text-xl sm:text-2xl font-black ${isDue ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {historyData?.monthClosingBalance !== undefined && (historyData.monthClosingBalance >= 0 ? '+' : '')}
+                ৳{(historyData?.monthClosingBalance || 0).toLocaleString()}
+              </div>
+              <div className="text-[10px] font-bold text-slate-600 dark:text-slate-400 mt-0.5 truncate">
+                Prev: {historyData?.prevBalance || 0} ৳
+              </div>
+            </div>
           </div>
 
+          {/* Daily Breakdown Header & Filter Tabs */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2">
+            <div>
+              <h4 className="text-xs sm:text-sm font-black uppercase tracking-wider text-slate-900 dark:text-white">
+                Daily Breakdown Log
+              </h4>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                {format(parseISO(`${selectedMonth}-01`), 'MMMM yyyy')} consumption history
+              </p>
+            </div>
+
+            {/* Filter Pills */}
+            <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 self-start sm:self-auto shadow-sm">
+              <button
+                onClick={() => setFilterType('all')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${filterType === 'all' ? 'bg-slate-900 dark:bg-slate-700 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+              >
+                All ({historyData?.dailyData.length || 0})
+              </button>
+              <button
+                onClick={() => setFilterType('meals')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${filterType === 'meals' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'}`}
+              >
+                Meals ({activeDaysCount})
+              </button>
+              <button
+                onClick={() => setFilterType('off')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${filterType === 'off' ? 'bg-rose-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-rose-600'}`}
+              >
+                Off ({offDaysCount})
+              </button>
+            </div>
+          </div>
+
+          {/* Daily List Items */}
+          <div className="space-y-2 pb-2">
+            {filteredDays.map(day => {
+              const hasMeals = day.dailyTotal > 0;
+              return (
+                <div 
+                  key={day.dateStr}
+                  className={`flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
+                    hasMeals 
+                      ? 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-600 shadow-sm' 
+                      : 'bg-slate-200/50 dark:bg-slate-900/60 border-slate-200/60 dark:border-slate-800/60 opacity-60'
+                  }`}
+                >
+                  {/* Date & Weekday */}
+                  <div className="flex items-center gap-3">
+                    <div className={`h-11 w-11 rounded-xl flex flex-col items-center justify-center shrink-0 border ${
+                      hasMeals 
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-700 dark:text-emerald-400 font-black' 
+                        : 'bg-slate-200 dark:bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold'
+                    }`}>
+                      <span className="text-sm font-black leading-none">{format(day.date, 'dd')}</span>
+                      <span className="text-[9px] uppercase tracking-wider leading-none mt-1 font-bold">{format(day.date, 'MMM')}</span>
+                    </div>
+
+                    <div>
+                      <span className="text-sm font-black text-slate-900 dark:text-white block">
+                        {format(day.date, 'EEEE')}
+                      </span>
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        {hasMeals ? `${day.dailyTotal} meal${day.dailyTotal > 1 ? 's' : ''}` : 'No meal recorded'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Meal Badges (Lunch / Dinner / Guest) */}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    {/* Lunch Badge */}
+                    <div className="flex items-center gap-1">
+                      <div 
+                        className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-bold border transition-colors ${
+                          day.lunch 
+                            ? 'bg-amber-100 dark:bg-amber-500/20 border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-300' 
+                            : 'bg-slate-100 dark:bg-slate-750 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
+                        }`}
+                        title={day.lunch ? 'Lunch eaten' : 'Lunch off'}
+                      >
+                        <SunMedium className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-black text-[11px]">L</span>
+                      </div>
+                      {day.guestLunch > 0 && (
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-500/40" title={`${day.guestLunch} Guest Lunch`}>
+                          +{day.guestLunch}G
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Dinner Badge */}
+                    <div className="flex items-center gap-1">
+                      <div 
+                        className={`h-7 px-2.5 rounded-lg flex items-center gap-1.5 text-xs font-bold border transition-colors ${
+                          day.dinner 
+                            ? 'bg-blue-100 dark:bg-blue-500/20 border-blue-300 dark:border-blue-500/40 text-blue-900 dark:text-blue-300' 
+                            : 'bg-slate-100 dark:bg-slate-750 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500'
+                        }`}
+                        title={day.dinner ? 'Dinner eaten' : 'Dinner off'}
+                      >
+                        <MoonStar className="h-3.5 w-3.5 shrink-0" />
+                        <span className="font-black text-[11px]">D</span>
+                      </div>
+                      {day.guestDinner > 0 && (
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-500/40" title={`${day.guestDinner} Guest Dinner`}>
+                          +{day.guestDinner}G
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Day Cost */}
+                  <div className="text-right w-16 shrink-0">
+                    <span className={`text-sm sm:text-base font-black ${hasMeals ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-slate-600'}`}>
+                      {hasMeals ? `৳${day.cost}` : '—'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Modal Bottom Action Bar */}
+        <div className="flex-none bg-white dark:bg-slate-900 px-5 sm:px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-600 dark:text-slate-400">
+            <span>Month Meals: <strong className="text-slate-900 dark:text-white">{historyData?.monthMealsCount || 0}</strong></span>
+            <span>•</span>
+            <span>Total Bill: <strong className="text-rose-600 dark:text-rose-400">৳{(historyData?.monthTotalCost || 0).toLocaleString()}</strong></span>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition-all active:scale-95"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>

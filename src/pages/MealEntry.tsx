@@ -12,13 +12,23 @@ import { useMembers, useMeals, useSettings } from '../contexts';
 export const MealEntry: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [entries, setEntries] = useState<Record<string, { lunch: boolean; dinner: boolean; guestLunch?: number; guestDinner?: number }>>({});
+  const [notes, setNotes] = useState<{ id: string; text: string; timestamp: string; }[]>([]);
+  const [newNote, setNewNote] = useState('');
+  const [showNoteInput, setShowNoteInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [price, setPrice] = useState(65);
   const [user, setUser] = useState<firebase.User | null>(null);
 
-  // Toast State
+  // Toast State with cleanup ref
   const [toast, setToast] = useState<{ show: boolean, type: 'success' | 'error', message: string }>({ show: false, type: 'success', message: '' });
+  const toastTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   // Strict future date prevention
   useEffect(() => {
@@ -54,6 +64,7 @@ export const MealEntry: React.FC = () => {
       const currentEntries: Record<string, { lunch: boolean; dinner: boolean; guestLunch?: number; guestDinner?: number }> = {};
       
       if (mealDoc) {
+        setNotes(mealDoc.notes || []);
         activeMembers.forEach(m => {
           currentEntries[m.id] = mealDoc.entries?.[m.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
         });
@@ -81,6 +92,7 @@ export const MealEntry: React.FC = () => {
             }
         } else {
             // For past dates that don't exist in DB, just show 0 meals (no auto-population)
+            setNotes([]);
             activeMembers.forEach(m => {
               currentEntries[m.id] = { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
             });
@@ -148,9 +160,51 @@ export const MealEntry: React.FC = () => {
     }
   };
 
+  const handleAddNote = async () => {
+    if (!user || !newNote.trim()) return;
+    const noteObj = {
+      id: Date.now().toString(),
+      text: newNote.trim(),
+      timestamp: new Date().toISOString()
+    };
+    const updatedNotes = [...notes, noteObj];
+    setNotes(updatedNotes);
+    setNewNote('');
+    setShowNoteInput(false);
+    
+    try {
+      await db.collection('meals').doc(selectedDate).set({
+        date: selectedDate,
+        notes: updatedNotes
+      }, { merge: true });
+      showToast('success', 'Note added successfully');
+    } catch (err) {
+      console.error("Save note error:", err);
+      showToast('error', 'Failed to add note.');
+    }
+  };
+
+  const handleDeleteNote = async (noteId: string) => {
+    if (!user) return;
+    const updatedNotes = notes.filter(n => n.id !== noteId);
+    setNotes(updatedNotes);
+    try {
+      await db.collection('meals').doc(selectedDate).set({
+        date: selectedDate,
+        notes: updatedNotes
+      }, { merge: true });
+    } catch (err) {
+      console.error("Delete note error:", err);
+      showToast('error', 'Failed to delete note.');
+    }
+  };
+
   const showToast = (type: 'success' | 'error', message: string) => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       setToast({ show: true, type, message });
-      setTimeout(() => setToast(prev => ({ ...prev, show: false })), 3000);
+      toastTimeoutRef.current = setTimeout(() => {
+        setToast(prev => ({ ...prev, show: false }));
+      }, 3000);
   };
 
   const handleSave = async () => {
@@ -241,21 +295,21 @@ export const MealEntry: React.FC = () => {
 
   return (
     <div className="h-full flex flex-col relative">
-      <div className="flex-none flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
+      <div className="flex-none flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm -mx-4 md:-mx-8 px-4 md:px-8 py-3.5 sm:py-4 md:py-6 -mt-4 md:-mt-8 mb-4">
         <div>
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-800 dark:text-white tracking-tight flex items-center gap-3 flex-wrap">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-2.5 flex-wrap">
             Daily Meal Entry
-            {!user && <span className="text-[10px] md:text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-1 rounded-md font-bold uppercase">Read Only</span>}
+            {!user && <span className="text-[9px] md:text-xs bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-md font-bold uppercase">Read Only</span>}
           </h2>
-          <p className="text-slate-500 dark:text-slate-400 mt-1">Mark meals for {format(new Date(selectedDate), 'MMMM do, yyyy')}</p>
+          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 mt-0.5">Mark meals for {format(new Date(selectedDate), 'MMMM do, yyyy')}</p>
         </div>
         
-        <div className="flex items-center gap-2">
-          <button onClick={handlePrevDay} className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full md:w-auto">
+          <button onClick={handlePrevDay} className="h-10 w-10 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-90 transition-all shadow-sm shrink-0">
             <ChevronLeft className="h-5 w-5 text-slate-600 dark:text-slate-400" />
           </button>
-          <div className="flex items-center gap-2 sm:gap-3 bg-white dark:bg-slate-800 p-2 px-2 sm:px-4 rounded-xl border border-emerald-100 dark:border-emerald-900/40 shadow-sm w-full md:w-auto ring-4 ring-emerald-50 dark:ring-emerald-900/10">
-            <CalendarDays className="h-5 w-5 text-emerald-500 dark:text-emerald-400 hidden sm:block" />
+          <div className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 py-2 px-3 sm:px-4 rounded-xl border border-emerald-100 dark:border-emerald-900/40 shadow-sm flex-1 md:flex-auto ring-2 ring-emerald-500/10">
+            <CalendarDays className="h-4 w-4 text-emerald-500 shrink-0" />
             <input
               type="date"
               max={format(new Date(), 'yyyy-MM-dd')}
@@ -265,25 +319,32 @@ export const MealEntry: React.FC = () => {
                 const val = e.target.value;
                 if (!val) return; // ignore empty
                 if (val > todayStr) {
-                  // User tried to pick future date, force to today
                   setSelectedDate(todayStr);
                   showToast('error', 'Future dates are not allowed!');
                 } else {
                   setSelectedDate(val);
                 }
               }}
-              className="outline-none text-slate-800 dark:text-white font-bold bg-transparent flex-1 text-sm sm:text-lg uppercase cursor-pointer text-center"
+              className="outline-none text-slate-800 dark:text-white font-bold bg-transparent text-xs sm:text-base uppercase cursor-pointer text-center w-full"
             />
           </div>
-          {selectedDate < format(new Date(), 'yyyy-MM-dd') && (
-            <button onClick={handleNextDay} className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
-              <ChevronRight className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-            </button>
-          )}
+          <button 
+            type="button"
+            onClick={handleNextDay} 
+            disabled={selectedDate >= format(new Date(), 'yyyy-MM-dd')}
+            className={`h-10 w-10 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl transition-all shadow-sm shrink-0 ${
+              selectedDate >= format(new Date(), 'yyyy-MM-dd')
+                ? 'opacity-25 cursor-not-allowed text-slate-300 dark:text-slate-600 pointer-events-none' 
+                : 'hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 active:scale-90 cursor-pointer'
+            }`}
+            title={selectedDate >= format(new Date(), 'yyyy-MM-dd') ? "Cannot navigate to future date" : "Next Day"}
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-scrollbar pb-32 md:pb-10 space-y-4 md:space-y-6">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-36 md:pb-16 space-y-4 md:space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6 mb-8">
         {activeMembers.map((member: Member) => {
                 const entry = entries[member.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
@@ -339,48 +400,105 @@ export const MealEntry: React.FC = () => {
                 )
             })}
         </div>
-      
+        
+        {/* Daily Notes Section */}
+        <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col transition-shadow">
+           <div className="flex items-center justify-between mb-6">
+               <div className="flex items-center gap-3">
+                   <div className="h-10 w-10 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-600 dark:text-amber-500 shrink-0">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                   </div>
+                   <div>
+                       <h3 className="text-lg font-bold text-slate-800 dark:text-white leading-tight">Daily Notes</h3>
+                       <p className="text-[10px] sm:text-xs font-bold text-slate-500 dark:text-slate-400">Remarks for {format(new Date(selectedDate), 'MMM do')}</p>
+                   </div>
+               </div>
+               <button 
+                  onClick={() => setShowNoteInput(!showNoteInput)}
+                  disabled={!user}
+                  className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors border border-emerald-100 dark:border-emerald-800/50 active:scale-95"
+               >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"/></svg>
+               </button>
+           </div>
+           
+           {showNoteInput && (
+             <div className="mb-6 flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+               <textarea
+                   value={newNote}
+                   onChange={(e) => setNewNote(e.target.value)}
+                   disabled={!user}
+                   placeholder="Write your note here..."
+                   className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-sm font-medium text-slate-700 dark:text-slate-300 outline-none focus:border-emerald-400 dark:focus:border-emerald-500 focus:ring-2 focus:ring-emerald-50 dark:focus:ring-emerald-900/20 transition-all resize-y min-h-[100px]"
+               />
+               <div className="flex justify-end gap-2">
+                  <button onClick={() => {setShowNoteInput(false); setNewNote('');}} className="px-4 py-2 text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition-colors">Cancel</button>
+                  <button onClick={handleAddNote} className="px-4 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-colors shadow-sm shadow-emerald-200 dark:shadow-emerald-900/20">Save Note</button>
+               </div>
+             </div>
+           )}
 
-      {/* Sticky Bottom Bar for Mobile & Desktop */}
-      <div className="fixed bottom-16 md:bottom-0 left-0 md:left-64 right-0 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 p-3 md:p-4 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)] z-30 flex justify-center md:justify-between items-center px-2 md:px-8 flex-wrap gap-2 transition-all">
+           <div className="flex flex-col gap-3">
+              {notes.length === 0 ? (
+                 <div className="text-center py-8 text-sm text-slate-400 dark:text-slate-500 font-bold border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-2xl">No notes for this date. Click + to add.</div>
+              ) : (
+                 notes.map(note => (
+                   <div key={note.id} className="relative group bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-5 rounded-2xl border border-slate-100 dark:border-slate-700/50 hover:border-emerald-200 dark:hover:border-emerald-800/50 transition-colors">
+                      <p className="text-sm font-medium text-slate-700 dark:text-slate-300 whitespace-pre-wrap pr-8 leading-relaxed">{note.text}</p>
+                      <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-slate-500 mt-3 block">{format(new Date(note.timestamp), 'hh:mm a')}</span>
+                      <button onClick={() => handleDeleteNote(note.id)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-200 dark:border-slate-700 hover:border-red-200 dark:hover:border-red-800">
+                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                      </button>
+                   </div>
+                 ))
+              )}
+           </div>
+        </div>
+        
+              </div>
+
+      {/* Floating Bottom Summary Bar for Mobile & Desktop - Inside Layout Bounds */}
+      <div className="flex-none mt-2 sm:mt-3 bg-white/95 dark:bg-slate-800/95 backdrop-blur-xl border border-slate-200/80 dark:border-slate-700/80 py-2.5 sm:py-3 px-3 md:px-6 rounded-2xl sm:rounded-3xl shadow-lg shadow-slate-200/50 dark:shadow-none z-30 flex justify-between items-center transition-all">
          
-         <div className="hidden md:flex items-center gap-3 bg-slate-50 dark:bg-slate-800/50 px-4 py-2 rounded-2xl border border-slate-100 dark:border-slate-800">
-             <div className="h-8 w-8 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+         <div className="hidden md:flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 px-3.5 py-1.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+             <div className="h-7 w-7 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                  <UsersRound className="h-4 w-4" />
              </div>
              <div className="flex flex-col">
-                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Active Members</span>
-                 <span className="text-sm font-bold text-slate-800 dark:text-white">{activeMembers.length} Members</span>
+                 <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest leading-tight">Active Members</span>
+                 <span className="text-xs font-bold text-slate-800 dark:text-white leading-tight">{activeMembers.length} Members</span>
              </div>
          </div>
 
-         <div className="flex items-center gap-2 sm:gap-4 md:gap-8 overflow-x-auto no-scrollbar w-full md:w-auto justify-center">
+         <div className="flex items-center gap-2 sm:gap-4 md:gap-6 overflow-x-auto no-scrollbar w-full md:w-auto justify-center">
               <div className="flex flex-col items-center px-1 sm:px-2">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Lunch</span>
-                  <span className="text-sm sm:text-base md:text-xl font-black text-amber-600 dark:text-amber-500">{totalLunch}</span>
+                  <span className="text-sm sm:text-base md:text-lg font-black text-amber-600 dark:text-amber-500">{totalLunch}</span>
               </div>
               <div className="flex flex-col items-center px-1 sm:px-2">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Dinner</span>
-                  <span className="text-sm sm:text-base md:text-xl font-black text-emerald-600 dark:text-emerald-500">{totalDinner}</span>
+                  <span className="text-sm sm:text-base md:text-lg font-black text-emerald-600 dark:text-emerald-500">{totalDinner}</span>
               </div>
-              <div className="flex flex-col items-center px-1 sm:px-2 border-l border-slate-100 dark:border-slate-800 ml-1 pl-2 sm:pl-4">
+              <div className="flex flex-col items-center px-1 sm:px-2 border-l border-slate-200/60 dark:border-slate-700/60 ml-1 pl-2 sm:pl-3">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Guests</span>
-                  <span className="text-sm sm:text-base md:text-xl font-black text-rose-500 dark:text-rose-400">{totalGuests}</span>
+                  <span className="text-sm sm:text-base md:text-lg font-black text-rose-500 dark:text-rose-400">{totalGuests}</span>
               </div>
-              <div className="flex flex-col items-center px-2 sm:px-3 border-x border-slate-100 dark:border-slate-800 mx-1 sm:mx-2">
+              <div className="flex flex-col items-center px-2 sm:px-3 border-x border-slate-200/60 dark:border-slate-700/60 mx-1">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Total Meals</span>
-                  <span className="text-sm sm:text-base md:text-xl font-black text-slate-900 dark:text-white">{totalMeals}</span>
+                  <span className="text-sm sm:text-base md:text-lg font-black text-slate-900 dark:text-white">{totalMeals}</span>
               </div>
               <div className="flex flex-col items-center px-1 sm:px-2">
                   <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider">Est. Cost</span>
-                  <span className="text-sm sm:text-base md:text-xl font-black text-emerald-600 dark:text-emerald-500">৳{totalCost}</span>
+                  <span className="text-sm sm:text-base md:text-lg font-black text-emerald-600 dark:text-emerald-500">৳{totalCost}</span>
               </div>
-          </div>
-          
-          <div className="hidden md:flex items-center gap-2 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1.5 rounded-lg border border-emerald-100 dark:border-emerald-800 shadow-sm">
-              <CheckCircle2 className="h-4 w-4 stroke-[2.5px]" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Auto Saved</span>
-          </div>
+         </div>
+         
+         <div className="hidden md:flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 shadow-sm shrink-0">
+             <CheckCircle2 className="h-3.5 w-3.5 stroke-[2.5px]" />
+             <span className="text-[9px] font-black uppercase tracking-widest">Auto Saved</span>
+         </div>
       </div>
 
       {/* Custom Toast Notification */}
@@ -395,7 +513,6 @@ export const MealEntry: React.FC = () => {
             </div>
          </div>
       )}
-      </div>
     </div>
   );
 };

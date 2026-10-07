@@ -7,13 +7,28 @@
   --color-primary: #dc2626;
 }
 
-body {
+html, body {
   font-family: 'Hind Siliguri', 'Inter', sans-serif;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
   transition: background-color 0.3s, color 0.3s;
 }
+input, textarea, [contenteditable="true"] {
+  user-select: text;
+}
 body.light { background-color: #f8fafc; color: #0f172a; }
-body.dark { background-color: #0f172a; color: #f8fafc; }
+body.dark { background-color: #0b1120; color: #f8fafc; }
+
+/* Mobile App Safe Areas */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 12px);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
 
 /* Hide scrollbar for clean mobile look */
 ::-webkit-scrollbar {

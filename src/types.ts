@@ -16,11 +16,18 @@ export interface MealEntry {
   guestDinner?: number;
 }
 
+export interface DailyNote {
+  id: string;
+  text: string;
+  timestamp: string;
+}
+
 // Map of memberId -> MealEntry
 export interface DailyMealDoc {
   id: string;
   date: string; // YYYY-MM-DD
   entries: Record<string, MealEntry>;
+  notes?: DailyNote[];
 }
 
 export interface AppSettings {

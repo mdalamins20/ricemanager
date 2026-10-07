@@ -109,45 +109,48 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       <main className={`flex-1 ${!isLoginPage ? 'md:ml-64' : ''} h-full flex flex-col relative overflow-hidden`}>
         {/* Mobile Header */}
         {!isLoginPage && (
-          <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-100 dark:border-slate-800 px-4 py-3 flex items-center justify-between md:hidden z-40 shrink-0">
+          <div className="bg-white/85 dark:bg-slate-900/85 backdrop-blur-xl border-b border-slate-200/60 dark:border-slate-800/60 px-4 py-2.5 pt-safe flex items-center justify-between md:hidden z-40 shrink-0 shadow-sm transition-colors duration-300">
              <a 
                href="https://mdalamins20.netlify.app/" 
                target="_blank" 
                rel="noopener noreferrer"
-               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+               className="flex items-center gap-2.5 active:scale-95 transition-transform"
              >
-               <div className="bg-transparent p-0 rounded-lg">
-                  <img src="/logo.png" alt="Logo" className="h-8 w-8 object-contain" />
+               <div className="h-9 w-9 rounded-xl bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 p-1 flex items-center justify-center">
+                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                </div>
-               <span className="font-bold text-xl text-emerald-600 tracking-tight">{messName}</span>
+               <div className="flex flex-col">
+                  <span className="font-extrabold text-base text-emerald-600 dark:text-emerald-400 tracking-tight leading-none">{messName}</span>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest leading-tight mt-0.5">Manager</span>
+               </div>
              </a>
              
-             <div className="flex items-center gap-2">
-                <button onClick={toggleTheme} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors mr-1">
-                   {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+             <div className="flex items-center gap-1">
+                <button onClick={toggleTheme} className="h-9 w-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full active:scale-90 transition-all">
+                   {isDark ? <Sun className="h-4.5 w-4.5 text-amber-400" /> : <Moon className="h-4.5 w-4.5 text-slate-600" />}
                 </button>
                 
-                <InstallPWA className="mr-2 text-xs py-1.5 px-3" />
+                <InstallPWA className="mr-1 text-[11px] py-1 px-2.5 font-bold rounded-xl" />
   
                 {user ? (
                   <>
-                     <button onClick={() => navigate('/settings')} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
-                        <Settings className="h-6 w-6 stroke-[1.5px]" />
+                     <button onClick={() => navigate('/settings')} className="h-9 w-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full active:scale-90 transition-all">
+                        <Settings className="h-5 w-5 stroke-[1.8px]" />
                      </button>
-                     <button onClick={() => { auth.signOut(); navigate('/login'); }} className="p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
-                        <LogOut className="h-6 w-6 stroke-[1.5px]" />
+                     <button onClick={() => { auth.signOut(); navigate('/login'); }} className="h-9 w-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-500 rounded-full active:scale-90 transition-all">
+                        <LogOut className="h-5 w-5 stroke-[1.8px]" />
                      </button>
                   </>
                 ) : (
-                  <button onClick={() => navigate('/login')} className="p-2 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 rounded-full">
-                      <LogIn className="h-5 w-5" />
+                  <button onClick={() => navigate('/login')} className="h-9 w-9 flex items-center justify-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 rounded-full active:scale-90 transition-all">
+                      <LogIn className="h-4.5 w-4.5" />
                   </button>
                 )}
              </div>
           </div>
         )}
 
-        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-3 sm:p-4 md:p-8 max-w-[1600px] mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
+        <div className={`${isLoginPage ? 'h-full flex items-center justify-center overflow-y-auto' : 'p-4 md:p-8 max-w-[1600px] mx-auto w-full flex-1 flex flex-col overflow-hidden pb-24 md:pb-8'}`}>
           {children}
         </div>
 

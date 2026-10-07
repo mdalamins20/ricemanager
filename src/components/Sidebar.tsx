@@ -12,7 +12,7 @@ const NavItems = [
   { icon: UtensilsCrossed, label: 'Meals', path: '/meals' },
   { icon: WalletCards, label: 'Money', path: '/money' },
   { icon: PieChart, label: 'Report', path: '/reports' },
-  { icon: ChefHat, label: 'Accounting', path: '/accounting' },
+  { icon: ChefHat, label: 'Accounting', shortLabel: 'Accounts', path: '/accounting' },
 ];
 
 import { useSettings } from '../contexts';
@@ -70,7 +70,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
             {({ isActive }) => (
               <>
                 <item.icon className={`h-5 w-5 transition-transform duration-200 group-hover:scale-110 ${isActive ? 'stroke-[2px]' : 'stroke-[1.5px]'}`} />
-                <span>{item.label}</span>
+                <span>{item.shortLabel || item.label}</span>
               </>
             )}
           </NavLink>
@@ -155,26 +155,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
 
 export const BottomNav: React.FC = () => {
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 md:hidden z-[100] pb-safe transition-colors duration-300">
-      <div className="flex justify-around items-center h-16">
+    <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 md:hidden z-[100] pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.4)] transition-all duration-300">
+      <div className="flex justify-around items-center h-16 px-1">
         {NavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             className={({ isActive }) => `
-              flex flex-col items-center justify-center w-full h-full gap-1
-              ${isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}
+              flex flex-col items-center justify-center flex-1 h-full py-1 rounded-2xl transition-all duration-200 active:scale-90
+              ${isActive ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400 dark:text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}
             `}
           >
             {({ isActive }) => (
-              <>
-                <div className={`transition-transform duration-200 ${isActive ? '-translate-y-1' : ''}`}>
-                    <item.icon className={`h-6 w-6 ${isActive ? 'fill-current stroke-[2px]' : 'stroke-[1.5px]'}`} />
+              <div className="flex flex-col items-center gap-1 relative w-full">
+                <div className={`p-1 rounded-xl transition-all duration-300 ${isActive ? 'bg-emerald-500/10 dark:bg-emerald-400/15 -translate-y-0.5' : ''}`}>
+                    <item.icon className={`h-5 w-5 ${isActive ? 'stroke-[2.5px]' : 'stroke-[1.8px]'}`} />
                 </div>
-                <span className={`text-[10px] font-medium transition-opacity ${isActive ? 'opacity-100 font-bold' : 'opacity-70'}`}>
+                <span className={`text-[10px] tracking-tight transition-all duration-200 leading-none ${isActive ? 'font-black scale-105' : 'font-medium opacity-80'}`}>
                     {item.label}
                 </span>
-              </>
+                {isActive && (
+                  <span className="absolute -bottom-1 h-1 w-4 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-in zoom-in-50 duration-200" />
+                )}
+              </div>
             )}
           </NavLink>
         ))}

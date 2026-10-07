@@ -8,6 +8,7 @@ import { Member, Deposit } from '../types';
 import { format } from 'date-fns';
 import { logAction } from '../utils/logger';
 import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
+import { MonthPicker } from '../components/MonthPicker';
 
 export const Money: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -38,35 +39,82 @@ export const Money: React.FC = () => {
   const selectedMemberStats = useMemo(() => {
       if (!formData.memberId) return null;
       const price = settings?.mealPrice || 65;
-      
-      let totalMeals = 0;
+      const targetMonth = formData.targetMonth || selectedMonth;
+      const startStr = `${targetMonth}-01`;
+
+      // Previous Balance (before selected target month)
+      let prevTotalDeposit = 0, prevTotalMeals = 0;
+      allDeposits.forEach(d => { 
+        if (d.memberId === formData.memberId && d.date < startStr) {
+          prevTotalDeposit += d.amount; 
+        }
+      });
       allMeals.forEach(mDoc => {
-          const entry = mDoc.entries?.[formData.memberId];
-          if (entry) {
-              if (entry.lunch) totalMeals++;
-              if (entry.dinner) totalMeals++;
-              if (entry.guestLunch) totalMeals += entry.guestLunch;
-              if (entry.guestDinner) totalMeals += entry.guestDinner;
-          }
+         if (mDoc.date < startStr) {
+            const entry = mDoc.entries?.[formData.memberId];
+            if (entry) { 
+              if (entry.lunch) prevTotalMeals++; 
+              if (entry.dinner) prevTotalMeals++; 
+              prevTotalMeals += Number(entry.guestLunch) || 0;
+              prevTotalMeals += Number(entry.guestDinner) || 0;
+            }
+         }
+      });
+      const prevBalance = prevTotalDeposit - (prevTotalMeals * price);
+
+      // Selected Target Month Deposits
+      let monthDeposit = 0, advanceDeposit = 0, finalDeposit = 0;
+      allDeposits.forEach(d => { 
+          if (d.memberId === formData.memberId && d.date.startsWith(targetMonth)) {
+              if (d.type === 'final') finalDeposit += d.amount;
+              else advanceDeposit += d.amount;
+              monthDeposit += d.amount;
+          } 
       });
 
-      let totalDeposit = 0;
-      allDeposits.forEach(d => {
-          if (d.memberId === formData.memberId) {
-              totalDeposit += d.amount;
-          }
+      // Selected Target Month Meals
+      let monthMeals = 0, lunchCount = 0, dinnerCount = 0, guestLunchCount = 0, guestDinnerCount = 0;
+      allMeals.forEach(mDoc => {
+         if (mDoc.date.startsWith(targetMonth)) {
+            const entry = mDoc.entries?.[formData.memberId];
+            if (entry) { 
+              if (entry.lunch) { monthMeals++; lunchCount++; }
+              if (entry.dinner) { monthMeals++; dinnerCount++; }
+              const gL = Number(entry.guestLunch) || 0;
+              const gD = Number(entry.guestDinner) || 0;
+              monthMeals += gL;
+              guestLunchCount += gL;
+              monthMeals += gD;
+              guestDinnerCount += gD;
+            }
+         }
       });
 
-      const totalBill = totalMeals * price;
-      const netBalance = totalDeposit - totalBill;
+      const monthBill = monthMeals * price;
+      const currentBalance = (prevBalance + monthDeposit) - monthBill;
+
+      let formattedMonth = targetMonth;
+      try {
+        const [y, m] = targetMonth.split('-');
+        formattedMonth = format(new Date(parseInt(y), parseInt(m) - 1, 1), 'MMMM yyyy');
+      } catch (err) {}
 
       return {
-          totalMeals,
-          totalDeposit,
-          totalBill,
-          netBalance
+          targetMonth,
+          formattedMonth,
+          price,
+          prevBalance,
+          advanceDeposit,
+          finalDeposit,
+          monthDeposit,
+          monthMeals,
+          lunchCount,
+          dinnerCount,
+          guestMealCount: guestLunchCount + guestDinnerCount,
+          monthBill,
+          currentBalance
       };
-  }, [formData.memberId, allMeals, allDeposits, settings]);
+  }, [formData.memberId, formData.targetMonth, selectedMonth, allMeals, allDeposits, settings]);
 
   const deposits = useMemo(() => {
     return allDeposits
@@ -75,8 +123,9 @@ export const Money: React.FC = () => {
         return { ...d, memberName: member ? member.fullName : 'Unknown', photoBase64: member?.photoBase64 };
       })
       .sort((a, b) => {
-        const dateA = a.createdAt || a.date;
-        const dateB = b.createdAt || b.date;
+        const getStr = (v: any) => typeof v === 'string' ? v : (v?.seconds ? new Date(v.seconds * 1000).toISOString() : '');
+        const dateA = getStr(a.createdAt) || a.date || '';
+        const dateB = getStr(b.createdAt) || b.date || '';
         return dateB.localeCompare(dateA);
       });
   }, [allDeposits, members]);
@@ -105,7 +154,7 @@ export const Money: React.FC = () => {
     if (!user || !formData.memberId || !formData.amount) return;
     try {
       await db.collection('deposits').add({
-        memberId: formData.memberId, amount: Number(formData.amount), date: `${formData.targetMonth}-01`, note: formData.note, type: formData.type, createdAt: new Date().toISOString()
+        memberId: formData.memberId, amount: Number(formData.amount), date: `${formData.targetMonth}-01`, note: formData.note || '', type: formData.type, createdAt: new Date().toISOString()
       });
       const memberName = members.find(m => m.id === formData.memberId)?.fullName || 'Unknown';
       await logAction('Add Deposit', `Added ${formData.amount} BDT (${formData.type}) for ${memberName}`);
@@ -156,8 +205,8 @@ export const Money: React.FC = () => {
               Object.values(mDoc.entries || {}).forEach(entry => {
                   if (entry.lunch) totalMeals++;
                   if (entry.dinner) totalMeals++;
-                  if (entry.guestLunch) totalMeals += entry.guestLunch;
-                  if (entry.guestDinner) totalMeals += entry.guestDinner;
+                  totalMeals += Number(entry.guestLunch) || 0;
+                  totalMeals += Number(entry.guestDinner) || 0;
               });
           }
       });
@@ -175,12 +224,12 @@ export const Money: React.FC = () => {
           <p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-widest mt-1">Manage Member Payments</p>
         </div>
         <div className="flex items-center gap-3">
-           <div className="flex items-center gap-2 px-4 py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm hover:shadow-md transition-all">
-              <Calendar className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
-              <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent outline-none text-sm font-bold text-slate-800 dark:text-white w-28 md:w-auto cursor-pointer" />
-           </div>
+           <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
           {user && (
-            <Button onClick={() => setIsModalOpen(true)} className="shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 rounded-2xl transition-transform hover:scale-105">
+            <Button onClick={() => {
+              setFormData(prev => ({ ...prev, targetMonth: selectedMonth }));
+              setIsModalOpen(true);
+            }} className="shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 bg-emerald-500 hover:bg-emerald-600 px-4 py-2.5 rounded-2xl transition-transform hover:scale-105">
               <Plus className="h-5 w-5 stroke-[2.5px]" /> <span className="font-bold">Add</span>
             </Button>
           )}
@@ -190,72 +239,72 @@ export const Money: React.FC = () => {
       <div className="flex-1 overflow-y-auto no-scrollbar pb-10 space-y-6 md:space-y-8">
       
       {/* Top Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl p-6 shadow-lg shadow-emerald-500/20 text-white relative overflow-hidden group">
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-2.5 sm:gap-4">
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg shadow-emerald-500/20 text-white relative overflow-hidden group">
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-20 w-20 sm:h-24 sm:w-24 bg-white/20 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700 pointer-events-none"></div>
               <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div className="flex justify-between items-start mb-4">
-                      <div className="h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
-                          <Banknote className="h-5 w-5 text-white" />
+                  <div className="flex justify-between items-start mb-2 sm:mb-4">
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
+                          <Banknote className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                       </div>
                   </div>
                   <div>
-                      <h3 className="text-3xl font-black mb-1">৳{monthTotal.toLocaleString()}</h3>
-                      <p className="text-xs font-bold text-emerald-100 uppercase tracking-wider">Total Month Deposit</p>
+                      <h3 className="text-xl sm:text-3xl font-black mb-0.5 sm:mb-1 tracking-tight">৳{monthTotal.toLocaleString()}</h3>
+                      <p className="text-[10px] sm:text-xs font-bold text-emerald-100 uppercase tracking-wider">Month Deposit</p>
                   </div>
               </div>
           </div>
           
           {/* Current Balance Card */}
-          <div className={`rounded-3xl p-6 shadow-lg text-white relative overflow-hidden group ${trueNetBalance >= 0 ? 'bg-gradient-to-br from-emerald-500 to-violet-600 shadow-emerald-500/20' : 'bg-gradient-to-br from-rose-500 to-orange-500 shadow-rose-500/20'}`}>
-              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-24 w-24 bg-white/20 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+          <div className={`rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-lg text-white relative overflow-hidden group ${trueNetBalance >= 0 ? 'bg-gradient-to-br from-teal-600 to-emerald-700 shadow-emerald-500/20' : 'bg-gradient-to-br from-rose-500 to-orange-500 shadow-rose-500/20'}`}>
+              <div className="absolute top-0 right-0 -mt-4 -mr-4 h-20 w-20 sm:h-24 sm:w-24 bg-white/20 rounded-full blur-xl group-hover:scale-150 transition-transform duration-700 pointer-events-none"></div>
               <div className="relative z-10 flex flex-col h-full justify-between">
-                  <div className="flex justify-between items-start mb-4">
-                      <div className="h-10 w-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
-                          {trueNetBalance >= 0 ? <Banknote className="h-5 w-5 text-white" /> : <AlertTriangle className="h-5 w-5 text-white" />}
+                  <div className="flex justify-between items-start mb-2 sm:mb-4">
+                      <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20">
+                          {trueNetBalance >= 0 ? <Banknote className="h-4 w-4 sm:h-5 sm:w-5 text-white" /> : <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-white" />}
                       </div>
                   </div>
                   <div>
-                      <h3 className="text-3xl font-black mb-1">
+                      <h3 className="text-xl sm:text-3xl font-black mb-0.5 sm:mb-1 tracking-tight">
                           {trueNetBalance >= 0 ? '+' : ''}৳{trueNetBalance.toLocaleString()}
                       </h3>
-                      <p className="text-xs font-bold text-white/80 uppercase tracking-wider">Net Balance</p>
+                      <p className="text-[10px] sm:text-xs font-bold text-white/80 uppercase tracking-wider">Net Balance</p>
                   </div>
               </div>
           </div>
           
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
              <div className="flex flex-col h-full justify-between">
-                 <div className="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-4">
-                     <ArrowDownLeft className="h-5 w-5" />
+                 <div className="h-7 w-7 sm:h-10 sm:w-10 rounded-lg sm:rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-600 dark:text-amber-400 mb-2 sm:mb-4">
+                     <ArrowDownLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                  </div>
                  <div>
-                     <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-1">৳{monthAdvance.toLocaleString()}</h3>
-                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Advance Payments</p>
+                     <h3 className="text-lg sm:text-2xl font-black text-slate-800 dark:text-white mb-0.5 sm:mb-1">৳{monthAdvance.toLocaleString()}</h3>
+                     <p className="text-[9px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Advance</p>
                  </div>
              </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
              <div className="flex flex-col h-full justify-between">
-                 <div className="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-4">
-                     <ArrowDownLeft className="h-5 w-5" />
+                 <div className="h-7 w-7 sm:h-10 sm:w-10 rounded-lg sm:rounded-2xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 mb-2 sm:mb-4">
+                     <ArrowDownLeft className="h-4 w-4 sm:h-5 sm:w-5" />
                  </div>
                  <div>
-                     <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-1">৳{monthFinal.toLocaleString()}</h3>
-                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Final Settlements</p>
+                     <h3 className="text-lg sm:text-2xl font-black text-slate-800 dark:text-white mb-0.5 sm:mb-1">৳{monthFinal.toLocaleString()}</h3>
+                     <p className="text-[9px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Final</p>
                  </div>
              </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
-             <div className="flex flex-col h-full justify-between">
-                 <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-4">
-                     <UsersRound className="h-5 w-5" />
+          <div className="col-span-2 xl:col-span-1 bg-white dark:bg-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-sm border border-slate-200/50 dark:border-slate-700/50 hover:shadow-md transition-all">
+             <div className="flex sm:flex-col items-center sm:items-start justify-between h-full">
+                 <div className="h-7 w-7 sm:h-10 sm:w-10 rounded-lg sm:rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 mb-0 sm:mb-4">
+                     <UsersRound className="h-4 w-4 sm:h-5 sm:w-5" />
                  </div>
-                 <div>
-                     <h3 className="text-2xl font-black text-slate-800 dark:text-white mb-1">{uniqueMembersPaid}</h3>
-                     <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Members Paid</p>
+                 <div className="text-right sm:text-left">
+                     <h3 className="text-lg sm:text-2xl font-black text-slate-800 dark:text-white mb-0.5 sm:mb-1">{uniqueMembersPaid}</h3>
+                     <p className="text-[9px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider">Members Paid</p>
                  </div>
              </div>
           </div>
@@ -320,36 +369,42 @@ export const Money: React.FC = () => {
             </tbody>
           </table>
 
-          {/* Mobile List View */}
-          <div className="md:hidden flex flex-col gap-3 p-4 bg-slate-50/30 dark:bg-slate-900/10">
+          {/* Mobile Native Wallet List View */}
+          <div className="md:hidden flex flex-col divide-y divide-slate-100 dark:divide-slate-800">
              {filteredDeposits.length === 0 ? (
-                <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 dark:text-slate-400">
-                    No deposits found for this month.
+                <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+                    <Banknote className="h-10 w-10 text-slate-300 dark:text-slate-600 mx-auto mb-2 opacity-40" />
+                    <p className="font-bold text-sm">No deposits found for this month</p>
+                    <p className="text-xs text-slate-400 mt-0.5">Tap + Add above to record a member deposit</p>
                 </div>
              ) : (
                filteredDeposits.map(deposit => (
-                 <div key={deposit.id} className="bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-3xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-start justify-between active:scale-[0.98] transition-transform gap-2">
-                    <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
-                       <div className="h-12 w-12 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-50 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shadow-inner overflow-hidden shrink-0">
+                 <div key={deposit.id} className="p-3.5 sm:p-4 flex items-center justify-between active:bg-slate-50 dark:active:bg-slate-700/30 transition-colors gap-3">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                       <div className="h-11 w-11 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm overflow-hidden shrink-0 border border-emerald-100 dark:border-emerald-800/40">
                           {(deposit as any).photoBase64 ? (
                               <img src={(deposit as any).photoBase64} alt={deposit.memberName} className="h-full w-full object-cover" />
                           ) : (
-                              <ArrowDownLeft className="h-6 w-6 stroke-[1.5px]" />
+                              <span>{deposit.memberName.charAt(0)}</span>
                           )}
                        </div>
                        <div className="min-w-0 flex-1">
-                          <h4 className="font-bold text-slate-800 dark:text-white text-base truncate">{deposit.memberName}</h4>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate">For {format(new Date(deposit.date), 'MMM yyyy')} • Paid {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}</p>
-                          {deposit.note && <p className="text-[11px] text-slate-500 mt-0.5 bg-slate-100 dark:bg-slate-800 inline-block px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 truncate max-w-full">{deposit.note}</p>}
+                          <div className="flex items-center gap-1.5">
+                             <h4 className="font-bold text-slate-800 dark:text-white text-sm truncate">{deposit.memberName}</h4>
+                             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${(!deposit.type || deposit.type === 'advance') ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                                 {(!deposit.type || deposit.type === 'advance') ? 'Adv' : 'Final'}
+                             </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium truncate mt-0.5">
+                              {format(new Date(deposit.date), 'MMM yyyy')} • {format(new Date(deposit.createdAt || deposit.date), 'dd MMM')}
+                          </p>
+                          {deposit.note && <p className="text-[10px] text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/60 inline-block px-1.5 py-0.5 rounded mt-0.5 truncate max-w-full font-medium">{deposit.note}</p>}
                        </div>
                     </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                       <span className="font-black text-emerald-600 dark:text-emerald-400 text-lg tracking-tight">+৳{deposit.amount}</span>
-                       <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider mb-1 ${(!deposit.type || deposit.type === 'advance') ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'}`}>
-                           {(!deposit.type || deposit.type === 'advance') ? 'Advance' : 'Final'}
-                       </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                       <span className="font-black text-emerald-600 dark:text-emerald-400 text-base tracking-tight">+৳{deposit.amount}</span>
                        {user && (
-                         <button onClick={() => initiateDelete(deposit)} className="p-2 bg-slate-50 dark:bg-slate-700/50 rounded-xl text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                         <button onClick={() => initiateDelete(deposit)} className="p-2 -mr-1 text-slate-400 hover:text-red-500 active:scale-90 transition-transform">
                             <Trash2 className="h-4 w-4" />
                          </button>
                        )}
@@ -357,19 +412,21 @@ export const Money: React.FC = () => {
                  </div>
                ))
              )}
-           </div>
+          </div>
         </div>
       </div>
 
-      {/* Add Modal */}
+      {/* Add Modal - Native mobile bottom sheet / desktop centered */}
       {isModalOpen && user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
-          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
-             <div className="flex justify-between items-center mb-6">
+          <div className="bg-white dark:bg-slate-900 rounded-t-[2rem] sm:rounded-3xl w-full max-w-md relative z-10 p-5 sm:p-6 animate-in slide-in-from-bottom-6 sm:zoom-in-95 border-t sm:border border-slate-100 dark:border-slate-800 max-h-[90vh] overflow-y-auto pb-safe">
+             {/* Mobile drag handle */}
+             <div className="w-12 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto mb-4 sm:hidden"></div>
+             <div className="flex justify-between items-center mb-5">
                 <h3 className="text-xl font-bold text-slate-800 dark:text-white">Add Deposit</h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400">
-                   <X className="h-6 w-6" />
+                <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors text-slate-400">
+                   <X className="h-5 w-5" />
                 </button>
              </div>
              <form onSubmit={handleSubmit} className="space-y-4">
@@ -378,19 +435,61 @@ export const Money: React.FC = () => {
                </select>
 
                {selectedMemberStats && (
-                   <div className="bg-slate-100 dark:bg-slate-800/50 p-4 rounded-xl text-sm border border-slate-200 dark:border-slate-700">
-                       <div className="flex justify-between mb-1.5">
-                           <span className="text-slate-500 dark:text-slate-400">Total Deposit</span>
-                           <span className="font-bold text-slate-700 dark:text-slate-300">৳{selectedMemberStats.totalDeposit}</span>
+                   <div className="bg-slate-50 dark:bg-slate-800/70 p-4 rounded-2xl text-sm border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                       <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                               Month: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{selectedMemberStats.formattedMonth}</span>
+                           </span>
+                           <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-slate-200/70 dark:bg-slate-700/70 text-slate-700 dark:text-slate-300">
+                               ৳{selectedMemberStats.price}/meal
+                           </span>
                        </div>
-                       <div className="flex justify-between mb-2">
-                           <span className="text-slate-500 dark:text-slate-400">Total Bill ({selectedMemberStats.totalMeals} Meals)</span>
-                           <span className="font-bold text-slate-700 dark:text-slate-300">৳{selectedMemberStats.totalBill}</span>
+
+                       <div className="space-y-1.5 text-xs">
+                           <div className="flex justify-between items-center">
+                               <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                   Previous Balance
+                                   <span className="text-[10px] text-slate-400 font-medium">({selectedMemberStats.prevBalance < 0 ? 'Due' : 'Advance'})</span>
+                               </span>
+                               <span className={`font-bold ${selectedMemberStats.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>
+                                   {selectedMemberStats.prevBalance >= 0 ? '+' : ''}৳{selectedMemberStats.prevBalance}
+                               </span>
+                           </div>
+
+                           <div className="flex justify-between items-center">
+                               <span className="text-slate-500 dark:text-slate-400">Total Deposit ({selectedMemberStats.formattedMonth})</span>
+                               <span className="font-bold text-slate-700 dark:text-slate-300">৳{selectedMemberStats.monthDeposit}</span>
+                           </div>
+
+                           <div className="flex justify-between items-center">
+                               <span className="text-slate-500 dark:text-slate-400">Total Bill ({selectedMemberStats.monthMeals} Meals)</span>
+                               <span className="font-bold text-slate-700 dark:text-slate-300">৳{selectedMemberStats.monthBill}</span>
+                           </div>
+
+                           {selectedMemberStats.monthMeals > 0 && (
+                               <div className="text-[10px] text-slate-400 dark:text-slate-500 flex items-center gap-2 pt-0.5">
+                                   <span>Lunch: {selectedMemberStats.lunchCount}</span>
+                                   <span>•</span>
+                                   <span>Dinner: {selectedMemberStats.dinnerCount}</span>
+                                   {selectedMemberStats.guestMealCount > 0 && (
+                                       <>
+                                           <span>•</span>
+                                           <span>Guest: {selectedMemberStats.guestMealCount}</span>
+                                       </>
+                                   )}
+                               </div>
+                           )}
                        </div>
-                       <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2 mt-1">
-                           <span className="text-slate-600 dark:text-slate-300 font-bold uppercase text-[10px] tracking-wider self-center">Current Balance</span>
-                           <span className={`font-black text-lg ${selectedMemberStats.netBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>
-                               {selectedMemberStats.netBalance >= 0 ? '+' : ''}৳{selectedMemberStats.netBalance}
+
+                       <div className="flex justify-between items-center border-t border-slate-200 dark:border-slate-700 pt-2.5 mt-1">
+                           <div>
+                               <span className="text-slate-700 dark:text-slate-300 font-extrabold uppercase text-[11px] tracking-wider block">Current Balance</span>
+                               <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                                   {selectedMemberStats.currentBalance < 0 ? 'বকেয়া রয়েছে (Due)' : 'অগ্রিম জমা রয়েছে (Advance)'}
+                               </span>
+                           </div>
+                           <span className={`font-black text-xl ${selectedMemberStats.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>
+                               {selectedMemberStats.currentBalance >= 0 ? '+' : ''}৳{selectedMemberStats.currentBalance}
                            </span>
                        </div>
                    </div>
@@ -399,7 +498,17 @@ export const Money: React.FC = () => {
                <div className="grid grid-cols-2 gap-3">
                    <div className="flex flex-col">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Deposit For Month</label>
-                      <input type="month" required value={formData.targetMonth} onChange={e => setFormData({...formData, targetMonth: e.target.value})} className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white" />
+                      <input 
+                         type="month" 
+                         required 
+                         max={format(new Date(), 'yyyy-MM')}
+                         value={formData.targetMonth} 
+                         onChange={e => {
+                           const curMonth = format(new Date(), 'yyyy-MM');
+                           setFormData({...formData, targetMonth: e.target.value > curMonth ? curMonth : e.target.value});
+                         }} 
+                         className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all dark:text-white" 
+                       />
                    </div>
                    <div className="flex flex-col">
                       <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">Deposit Type</label>

@@ -36,8 +36,8 @@ export const useMemberStats = (
         if (entry) {
           if (entry.lunch) totalMeals++;
           if (entry.dinner) totalMeals++;
-          if (entry.guestLunch) totalMeals += entry.guestLunch;
-          if (entry.guestDinner) totalMeals += entry.guestDinner;
+          totalMeals += Number(entry.guestLunch) || 0;
+          totalMeals += Number(entry.guestDinner) || 0;
         }
       }
     });

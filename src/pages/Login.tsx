@@ -68,7 +68,7 @@ export const Login: React.FC = () => {
         )}
 
         {error && (
-          <div className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 p-4 rounded-xl mb-6 text-sm text-center border border-emerald-100 dark:border-emerald-900/40 font-medium relative z-10 animate-in fade-in slide-in-from-top-2 flex items-center justify-center gap-2">
+          <div className="bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 p-4 rounded-xl mb-6 text-sm text-center border border-rose-200 dark:border-rose-900/40 font-medium relative z-10 animate-in fade-in slide-in-from-top-2 flex items-center justify-center gap-2">
             <AlertTriangle className="h-4 w-4" /> {error}
           </div>
         )}

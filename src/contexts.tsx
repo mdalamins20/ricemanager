@@ -32,34 +32,64 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
   const [autoPopulated, setAutoPopulated] = useState(false);
 
   useEffect(() => {
-    const unsubMembers = db.collection('members').onSnapshot(snap => {
-      setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member)));
-      setMembersLoading(false);
-    });
-
-    const unsubMeals = db.collection('meals').onSnapshot(snap => {
-      setAllMeals(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyMealDoc)));
-      setMealsLoading(false);
-    });
-
-    const unsubDeposits = db.collection('deposits').onSnapshot(snap => {
-      setAllDeposits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Deposit)));
-      setDepositsLoading(false);
-    });
-
-    const unsubVendorPayments = db.collection('vendor_payments').onSnapshot(snap => {
-      setVendorPayments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VendorPayment)));
-      setVendorPaymentsLoading(false);
-    });
-
-    const unsubSettings = db.collection('settings').doc('config').onSnapshot(doc => {
-      if (doc.exists) {
-        const data = doc.data() as AppSettings;
-        setSettings(data);
-        if (data.messName) setMessName(data.messName);
+    const unsubMembers = db.collection('members').onSnapshot(
+      snap => {
+        setMembers(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member)));
+        setMembersLoading(false);
+      },
+      err => {
+        console.error('Error in members snapshot listener:', err);
+        setMembersLoading(false);
       }
-      setSettingsLoading(false);
-    });
+    );
+
+    const unsubMeals = db.collection('meals').onSnapshot(
+      snap => {
+        setAllMeals(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DailyMealDoc)));
+        setMealsLoading(false);
+      },
+      err => {
+        console.error('Error in meals snapshot listener:', err);
+        setMealsLoading(false);
+      }
+    );
+
+    const unsubDeposits = db.collection('deposits').onSnapshot(
+      snap => {
+        setAllDeposits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Deposit)));
+        setDepositsLoading(false);
+      },
+      err => {
+        console.error('Error in deposits snapshot listener:', err);
+        setDepositsLoading(false);
+      }
+    );
+
+    const unsubVendorPayments = db.collection('vendor_payments').onSnapshot(
+      snap => {
+        setVendorPayments(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as VendorPayment)));
+        setVendorPaymentsLoading(false);
+      },
+      err => {
+        console.error('Error in vendor payments snapshot listener:', err);
+        setVendorPaymentsLoading(false);
+      }
+    );
+
+    const unsubSettings = db.collection('settings').doc('config').onSnapshot(
+      doc => {
+        if (doc.exists) {
+          const data = doc.data() as AppSettings;
+          setSettings(data);
+          if (data.messName) setMessName(data.messName);
+        }
+        setSettingsLoading(false);
+      },
+      err => {
+        console.error('Error in settings snapshot listener:', err);
+        setSettingsLoading(false);
+      }
+    );
 
     return () => { unsubMembers(); unsubMeals(); unsubDeposits(); unsubVendorPayments(); unsubSettings(); };
   }, []);

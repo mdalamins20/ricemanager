@@ -5,7 +5,7 @@ import { Button } from '../components/Button';
 import { 
   UserPlus, UserCog, Trash2, Phone, MapPin, X, UsersRound, 
   Lock, Calendar, ChevronRight, AlertTriangle, CheckCircle2, 
-  History, MoreVertical, Edit3, Camera
+  History, MoreVertical, Edit3, Camera, Search, MessageCircle
 } from 'lucide-react';
 import { Member, DailyMealDoc, AppSettings, Deposit } from '../types';
 import { format } from 'date-fns';
@@ -23,6 +23,8 @@ export const Members: React.FC = () => {
   const dataLoading = membersLoading || mealsLoading || depositsLoading || settingsLoading;
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [user, setUser] = useState<firebase.User | null>(null);
   const [viewMember, setViewMember] = useState<Member | null>(null);
@@ -134,15 +136,15 @@ export const Members: React.FC = () => {
         if (entry) {
           if (entry.lunch) totalMeals++;
           if (entry.dinner) totalMeals++;
-          if (entry.guestLunch) totalMeals += entry.guestLunch;
-          if (entry.guestDinner) totalMeals += entry.guestDinner;
+          totalMeals += Number(entry.guestLunch) || 0;
+          totalMeals += Number(entry.guestDinner) || 0;
         }
       });
 
       const totalCost = totalMeals * currentPrice;
-      const netBalance = totalDeposit - totalCost;
+      const netBalance = Number.isNaN(totalDeposit - totalCost) ? 0 : totalDeposit - totalCost;
 
-      if (netBalance < 0) {
+      if (Number.isNaN(netBalance) || netBalance < 0) {
         setDeleteModal(prev => ({ 
             ...prev, 
             loading: false, 
@@ -172,32 +174,75 @@ export const Members: React.FC = () => {
 
   const closeModal = () => { setIsModalOpen(false); setSelectedMemberId(null); setFormError(''); };
 
+  const filteredMembers = useMemo(() => {
+    return members.filter(m => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || m.fullName.toLowerCase().includes(q) || (m.phone && m.phone.includes(q));
+      const matchesStatus = filterStatus === 'all' || m.status === filterStatus;
+      return matchesSearch && matchesStatus;
+    });
+  }, [members, searchQuery, filterStatus]);
+
   return (
     <>
       <div className="h-full flex flex-col max-w-7xl mx-auto w-full animate-in fade-in duration-500">
         {viewMember && <MemberHistory member={viewMember} onClose={() => setViewMember(null)} />}
 
         {/* Page Header */}
-        <div className="flex-none mb-6 md:mb-10 bg-white dark:bg-slate-800/50 p-6 md:p-8 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
+        <div className="flex-none mb-4 md:mb-8 bg-white dark:bg-slate-800/50 p-4 sm:p-6 md:p-8 rounded-2xl sm:rounded-3xl md:rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="absolute top-0 right-0 -mt-10 -mr-10 h-40 w-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-            <div className="relative z-10 flex items-center gap-4">
-                 <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none shrink-0">
-                     <UsersRound className="h-7 w-7 stroke-[2px]" />
+            <div className="relative z-10 flex items-center gap-3 sm:gap-4">
+                 <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200 dark:shadow-none shrink-0">
+                     <UsersRound className="h-6 w-6 sm:h-7 sm:w-7 stroke-[2px]" />
                  </div>
                  <div>
-                     <h2 className="text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Members</h2>
-                     <p className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">
-                        <span className="text-emerald-600 dark:text-emerald-400">{members.length}</span> ACTIVE MEMBERS
+                     <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Members</h2>
+                     <p className="text-[11px] sm:text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{members.filter(m => m.status === 'active').length}</span> ACTIVE MEMBERS
                      </p>
                  </div>
             </div>
             
             {user && (
-                <Button onClick={() => openModal()} className="relative z-10 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 rounded-2xl px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 hover:-translate-y-0.5 transition-all w-full sm:w-auto flex items-center justify-center font-bold">
-                    <UserPlus className="h-5 w-5 stroke-[2.5px] mr-2" />
-                    Add New Member
+                <Button onClick={() => openModal()} className="relative z-10 shadow-lg shadow-emerald-200 dark:shadow-emerald-900/20 rounded-xl sm:rounded-2xl px-5 py-2.5 sm:py-3.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center font-bold text-sm">
+                    <UserPlus className="h-4.5 w-4.5 stroke-[2.5px] mr-2" />
+                    Add Member
                 </Button>
             )}
+        </div>
+
+        {/* Mobile Search & Segmented Filter Bar */}
+        <div className="flex flex-col sm:flex-row gap-2.5 mb-4 shrink-0">
+            <div className="relative flex-1">
+                <Search className="h-4 w-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input 
+                  type="text" 
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search by name or phone..."
+                  className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800/80 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs sm:text-sm text-slate-800 dark:text-white placeholder-slate-400 outline-none focus:ring-2 focus:ring-emerald-500/20 shadow-sm"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+            </div>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shrink-0 border border-slate-200/60 dark:border-slate-700/60">
+                {(['all', 'active', 'inactive'] as const).map(status => (
+                  <button
+                    key={status}
+                    onClick={() => setFilterStatus(status)}
+                    className={`flex-1 sm:flex-none px-3.5 py-1.5 rounded-lg text-xs font-bold capitalize transition-all active:scale-95 ${
+                      filterStatus === status 
+                        ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' 
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+            </div>
         </div>
 
         {/* Content Area */}
@@ -216,45 +261,45 @@ export const Members: React.FC = () => {
               <p className="text-sm">Click "Add New Member" to get started.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4 md:gap-6">
-            {members.map(member => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 md:gap-6">
+            {filteredMembers.map(member => (
               <div 
                 key={member.id}
                 onClick={() => setViewMember(member)}
-                className="group relative bg-white dark:bg-slate-800/80 rounded-[1.5rem] p-5 border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:shadow-emerald-500/5 dark:hover:bg-slate-800 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden backdrop-blur-sm flex flex-col justify-between h-full"
+                className="group relative bg-white dark:bg-slate-800/80 rounded-2xl sm:rounded-[1.5rem] p-4 sm:p-5 border border-slate-100 dark:border-slate-700/50 shadow-sm hover:shadow-lg hover:shadow-emerald-500/5 dark:hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 cursor-pointer overflow-hidden backdrop-blur-sm flex flex-col justify-between h-full"
               >
                 {/* Subtle Background Accent */}
                 <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 pointer-events-none ${member.status === 'active' ? 'bg-emerald-500' : 'bg-slate-500'}`}></div>
 
-                <div className="relative z-10 flex gap-4">
+                <div className="relative z-10 flex gap-3.5 sm:gap-4">
                     {/* Avatar */}
                     <div className="relative shrink-0">
-                        <div className={`h-14 w-14 rounded-[1.25rem] flex items-center justify-center font-black text-2xl shadow-sm border transition-colors ${member.status === 'active' ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/30' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-700'}`}>
+                        <div className={`h-12 w-12 sm:h-14 sm:w-14 rounded-2xl flex items-center justify-center font-black text-xl sm:text-2xl shadow-sm border transition-colors ${member.status === 'active' ? 'bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/30 dark:to-emerald-800/10 text-emerald-600 dark:text-emerald-400 border-emerald-100 dark:border-emerald-800/30' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 dark:text-slate-500 border-slate-100 dark:border-slate-700'}`}>
                             {member.photoBase64 ? (
-                                <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover rounded-[1.25rem]" />
+                                <img src={member.photoBase64} alt={member.fullName} className="h-full w-full object-cover rounded-2xl" />
                             ) : (
                                 member.fullName.charAt(0)
                             )}
                         </div>
                         {/* Status Dot */}
-                        <div className={`absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-800 ${member.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
+                        <div className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white dark:border-slate-800 ${member.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'}`}></div>
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0 flex flex-col justify-center">
                         <div className="flex justify-between items-start">
-                            <h3 className="text-base font-bold text-slate-800 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate pr-2">
+                            <h3 className="text-sm sm:text-base font-bold text-slate-800 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate pr-1">
                                 {member.fullName}
                             </h3>
-                            <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600 stroke-[2.5px] transition-transform group-hover:translate-x-1 shrink-0 mt-0.5" />
+                            <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600 stroke-[2.5px] transition-transform group-hover:translate-x-1 shrink-0" />
                         </div>
 
                         <div className="mt-1 space-y-0.5">
                             <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
-                                <Phone className="h-3 w-3 shrink-0" /> <span>{member.phone}</span>
+                                <Phone className="h-3 w-3 shrink-0 text-emerald-500" /> <span>{member.phone}</span>
                             </p>
                             {member.address && (
-                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
+                                <p className="text-[10px] sm:text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1.5 truncate">
                                     <MapPin className="h-3 w-3 shrink-0" /> <span>{member.address}</span>
                                 </p>
                             )}
@@ -262,26 +307,51 @@ export const Members: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="relative z-10 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
-                    <div className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${member.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
-                        {member.status}
+                <div className="relative z-10 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${member.status === 'active' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
+                            {member.status}
+                        </div>
+                        {/* Quick Contact Chips */}
+                        {member.phone && (
+                          <div className="flex items-center gap-1">
+                            <a 
+                              href={`tel:${member.phone}`} 
+                              onClick={e => e.stopPropagation()} 
+                              className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 transition-colors"
+                              title="Call"
+                            >
+                              <Phone className="h-3 w-3" />
+                            </a>
+                            <a 
+                              href={`https://wa.me/${member.phone.startsWith('0') ? '88' + member.phone : member.phone}`} 
+                              target="_blank" 
+                              rel="noreferrer"
+                              onClick={e => e.stopPropagation()} 
+                              className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 transition-colors"
+                              title="WhatsApp"
+                            >
+                              <MessageCircle className="h-3 w-3" />
+                            </a>
+                          </div>
+                        )}
                     </div>
 
                     {user && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -my-2">
+                        <div className="flex items-center gap-0.5 -my-1">
                             <button 
                                 onClick={(e) => { e.stopPropagation(); openModal(member, e); }}
-                                className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-xl transition-colors"
+                                className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg active:scale-90 transition-all"
                                 title="Edit Profile"
                             >
-                                <Edit3 className="h-4 w-4 stroke-[2px]" />
+                                <Edit3 className="h-3.5 w-3.5 stroke-[2px]" />
                             </button>
                             <button 
                                 onClick={(e) => { e.stopPropagation(); initiateDelete(member, e); }}
-                                className="p-2 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-xl transition-colors"
+                                className="p-1.5 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30 rounded-lg active:scale-90 transition-all"
                                 title="Delete Member"
                             >
-                                <Trash2 className="h-4 w-4 stroke-[2px]" />
+                                <Trash2 className="h-3.5 w-3.5 stroke-[2px]" />
                             </button>
                         </div>
                     )}
