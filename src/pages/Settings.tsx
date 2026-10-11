@@ -221,18 +221,18 @@ export const Settings: React.FC = () => {
       if (result.success) {
         setServerTestResult({
           success: true,
-          message: `✅ সফলভাবে সংযোগ স্থাপিত হয়েছে! (স্ট্যাটাস: ${result.status === 'connected' ? 'কানেক্টেড (+' + (result.phone || '') + ')' : result.status}, লেটেন্সি: ${result.latencyMs}ms)`
+          message: `✅ Connection established successfully! (Status: ${result.status === 'connected' ? 'Connected (+' + (result.phone || '') + ')' : result.status}, Latency: ${result.latencyMs}ms)`
         });
       } else {
         setServerTestResult({
           success: false,
-          message: `❌ সংযোগ ব্যর্থ: ${result.error || 'সার্ভার অফলাইন'}`
+          message: `❌ Connection failed: ${result.error || 'Server offline'}`
         });
       }
     } catch (e: any) {
       setServerTestResult({
         success: false,
-        message: `❌ সংযোগ ব্যর্থ: ${e.message}`
+        message: `❌ Connection failed: ${e.message}`
       });
     } finally {
       setTestingServer(false);
@@ -686,36 +686,36 @@ export const Settings: React.FC = () => {
                             <div>
                                 <h4 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                     <ChefHat className="h-4 w-4 text-emerald-500" />
-                                    Food Provider / Vendor Contact (বাবুর্চি / ভেন্ডর তথ্য)
+                                    Food Provider / Vendor Contact
                                 </h4>
                                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                    ভেন্ডরকে পেমেন্ট দেওয়ার সাথে সাথে এই নম্বরে স্বয়ংক্রিয় হোয়াটসঅ্যাপ রসিদ ও মাস শেষে পূর্ণাঙ্গ মিল হিসাব যাবে।
+                                    Automated WhatsApp payment receipts and month-end summaries will be sent to this phone number.
                                 </p>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                                        ভেন্ডর / বাবুর্চির নাম
+                                        Vendor / Cook Name
                                     </label>
                                     <input 
                                         type="text"
                                         value={vendorName}
                                         onChange={(e) => setVendorName(e.target.value)}
-                                        placeholder="যেমন: খালা / বাবুর্চি / বুয়া"
+                                        placeholder="e.g. Cook / Vendor Name"
                                         className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
                                     />
                                 </div>
 
                                 <div>
                                     <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                                        হোয়াটসঅ্যাপ মোবাইল নম্বর
+                                        WhatsApp Mobile Number
                                     </label>
                                     <input 
                                         type="text"
                                         value={vendorPhone}
                                         onChange={(e) => setVendorPhone(e.target.value)}
-                                        placeholder="যেমন: 017xxxxxxxx বা 88017xxxxxxxx"
+                                        placeholder="e.g. 017xxxxxxxx or 88017xxxxxxxx"
                                         className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
                                     />
                                 </div>
@@ -728,10 +728,10 @@ export const Settings: React.FC = () => {
                                 <div>
                                     <h4 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
                                         <Globe className="h-4 w-4 text-emerald-500" />
-                                        WhatsApp Server URL (পার্মানেন্ট Ngrok / অনলাইন ক্লাউড সংযোগ)
+                                        WhatsApp Server URL (Cloud / Ngrok Tunnel)
                                     </h4>
                                     <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                        অ্যাপটি Netlify বা মোবাইল থেকে চলার সময় আপনার ল্যাপটপের WhatsApp ইঞ্জিনের সাথে যুক্ত থাকতে এই পার্মানেন্ট লিংক ব্যবহৃত হবে।
+                                        Used to connect the web app (Netlify or mobile) to the WhatsApp background service.
                                     </p>
                                 </div>
                                 <div className="flex items-center gap-2">
@@ -744,12 +744,12 @@ export const Settings: React.FC = () => {
                                         {testingServer ? (
                                             <>
                                                 <div className="h-3.5 w-3.5 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
-                                                টেস্টিং...
+                                                Testing...
                                             </>
                                         ) : (
                                             <>
                                                 <Radio className="h-3.5 w-3.5 text-emerald-500" />
-                                                কানেকশন টেস্ট করুন
+                                                Test Connection
                                             </>
                                         )}
                                     </button>
@@ -758,7 +758,7 @@ export const Settings: React.FC = () => {
 
                             <div>
                                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
-                                    সার্ভার বেস ইউআরএল (API Base URL)
+                                    Server API Base URL
                                 </label>
                                 <div className="relative">
                                     <input 
@@ -780,7 +780,7 @@ export const Settings: React.FC = () => {
                                             }}
                                             className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-md transition-all active:scale-95"
                                         >
-                                            স্থায়ী লিংক বসান
+                                            Use Static URL
                                         </button>
                                     ) : (
                                         <button
@@ -788,7 +788,7 @@ export const Settings: React.FC = () => {
                                             onClick={() => setWhatsappServerUrl('')}
                                             className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-rose-500 bg-slate-100 dark:bg-slate-700 rounded-md"
                                         >
-                                            মুছুন
+                                            Clear
                                         </button>
                                     )}
                                 </div>
@@ -810,11 +810,11 @@ export const Settings: React.FC = () => {
                             <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/60 rounded-xl text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
                                 <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
                                     <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
-                                    পার্মানেন্ট স্ট্যাটিক ডোমেইন সুবিধা
+                                    Permanent Static Domain
                                 </div>
                                 <p className="text-slate-600 dark:text-slate-400">
-                                    আপনার স্থায়ী ডোমেইন: <code className="px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded font-mono text-[10px] text-emerald-600 dark:text-emerald-400">https://unappreciably-nonsyllogistical-gonzalo.ngrok-free.dev</code><br />
-                                    এটি সিস্টেমে পার্মানেন্টভাবে যুক্ত হয়ে গেছে। আপনি ল্যাপটপ বন্ধ বা রিস্টার্ট করলেও উইন্ডোজ স্টার্টআপে এটি স্বয়ংক্রিয়ভাবে ব্যাকগ্রাউন্ডে চালু হবে এবং লিংক কখনোই পরিবর্তন হবে না।
+                                    Static Domain: <code className="px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded font-mono text-[10px] text-emerald-600 dark:text-emerald-400">https://unappreciably-nonsyllogistical-gonzalo.ngrok-free.dev</code><br />
+                                    Configured permanently into your system. When running via Windows Startup, the server runs in the background and this link remains stable.
                                 </p>
                             </div>
                         </div>

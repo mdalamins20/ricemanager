@@ -144,11 +144,11 @@ export const Accounting: React.FC = () => {
       }, { merge: true });
 
       setIsVendorModalOpen(false);
-      showToast('success', 'ভেন্ডর তথ্য সফলভাবে সংরক্ষিত হয়েছে!');
+      showToast('success', 'Vendor information saved successfully!');
       logAction('Update Vendor Info', `Updated vendor: ${vendorNameInput} (${vendorPhoneInput})`).catch(console.error);
     } catch (err: any) {
       console.error(err);
-      showToast('error', 'ভেন্ডর তথ্য সেভ করতে সমস্যা হয়েছে।');
+      showToast('error', 'Failed to save vendor information.');
     } finally {
       setSavingVendor(false);
     }
@@ -158,7 +158,7 @@ export const Accounting: React.FC = () => {
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-        showToast('error', 'পেমেন্ট যুক্ত করতে অনুগ্রহ করে লগইন করুন।');
+        showToast('error', 'Please log in to add payment.');
         return;
     }
     const payNum = Number(amount);
@@ -185,7 +185,7 @@ export const Accounting: React.FC = () => {
       setTransactionDate(format(new Date(), 'yyyy-MM-dd'));
       setPaymentForMonth(selectedMonth);
 
-      showToast('success', `✅ ভেন্ডর পেমেন্ট ৳${payNum} সফলভাবে সংরক্ষিত হয়েছে!`);
+      showToast('success', `✅ Vendor payment of ৳${payNum} saved successfully!`);
 
       // WhatsApp automated payment receipt
       const vPhone = formatWhatsAppPhone(settings?.vendorPhone);
@@ -198,7 +198,7 @@ export const Accounting: React.FC = () => {
           method: 'POST',
           headers: getApiHeaders(),
           body: JSON.stringify({
-            vendorName: settings?.vendorName || 'খালা / বাবুর্চি',
+            vendorName: settings?.vendorName || 'Cook / Vendor',
             phone: vPhone,
             paymentDate: transactionDate,
             amount: payNum,
@@ -209,7 +209,7 @@ export const Accounting: React.FC = () => {
           })
         }).then(r => r.json()).then(res => {
           if (res?.success) {
-            showToast('info', `📲 ভেন্ডরের হোয়াটসঅ্যাপে (${vPhone}) পেমেন্ট রসিদ পাঠানো হয়েছে!`);
+            showToast('info', `📲 Payment receipt sent to vendor WhatsApp (${vPhone})!`);
           }
         }).catch(err => {
           console.log('[Vendor Bot] Offline or error:', err);
@@ -217,7 +217,7 @@ export const Accounting: React.FC = () => {
       }
     } catch (error) {
       console.error("Error adding vendor payment: ", error);
-      showToast('error', 'পেমেন্ট সংরক্ষণ করতে সমস্যা হয়েছে।');
+      showToast('error', 'Failed to save payment record.');
     } finally {
       setSubmitting(false);
     }
@@ -228,7 +228,7 @@ export const Accounting: React.FC = () => {
     setSendStatementConfirm(false);
     const vPhone = formatWhatsAppPhone(settings?.vendorPhone);
     if (!vPhone) {
-      showToast('warning', 'ভেন্ডরের কোনো হোয়াটসঅ্যাপ নম্বর পাওয়া যায়নি! অনুগ্রহ করে নম্বর যুক্ত করুন।');
+      showToast('warning', 'No WhatsApp number found for vendor! Please add a phone number.');
       setIsVendorModalOpen(true);
       return;
     }
@@ -240,7 +240,7 @@ export const Accounting: React.FC = () => {
         method: 'POST',
         headers: getApiHeaders(),
         body: JSON.stringify({
-          vendorName: settings?.vendorName || 'খালা / বাবুর্চি',
+          vendorName: settings?.vendorName || 'Cook / Vendor',
           phone: vPhone,
           monthName: vendorBilling.monthName,
           totalMeals: vendorBilling.totalMeals,
@@ -252,13 +252,13 @@ export const Accounting: React.FC = () => {
       });
       const data = await res.json();
       if (data && data.success) {
-        showToast('success', `✅ ভেন্ডরের হোয়াটসঅ্যাপে (${vPhone}) ${vendorBilling.monthName} মাসের চূড়ান্ত হিসাব সফলভাবে পাঠানো হয়েছে!`);
+        showToast('success', `✅ Month-end summary successfully sent to vendor WhatsApp (${vPhone})!`);
       } else {
-        showToast('error', `পাঠানো যায়নি: ${data?.error || 'সার্ভার সমস্যা'}`);
+        showToast('error', `Failed to send: ${data?.error || 'Server error'}`);
       }
     } catch (err: any) {
       console.error(err);
-      showToast('error', 'হোয়াটসঅ্যাপ সার্ভারের সাথে সংযোগ করা যায়নি। সার্ভার চালু আছে কিনা দেখুন।');
+      showToast('error', 'Could not connect to WhatsApp server. Please check if the server is running.');
     } finally {
       setStatementSending(false);
     }
@@ -278,10 +278,10 @@ export const Accounting: React.FC = () => {
     try {
       await db.collection('vendor_payments').doc(id).delete();
       logAction('Delete Vendor Payment', `Deleted vendor payment of ৳${payAmount}`).catch(console.error);
-      showToast('success', 'পেমেন্ট রেকর্ড মুছে ফেলা হয়েছে।');
+      showToast('success', 'Payment record deleted successfully.');
     } catch (error) {
       console.error("Error deleting payment: ", error);
-      showToast('error', 'পেমেন্ট রেকর্ড মুছতে সমস্যা হয়েছে।');
+      showToast('error', 'Failed to delete payment record.');
     }
   };
 
@@ -388,14 +388,14 @@ export const Accounting: React.FC = () => {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
-                  {settings?.vendorName || 'খালা / বাবুর্চি'}
+                  {settings?.vendorName || 'Cook / Vendor'}
                 </h3>
                 {user && (
                   <button 
                     type="button"
                     onClick={() => setIsVendorModalOpen(true)}
                     className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors"
-                    title="ভেন্ডর তথ্য এডিট করুন"
+                    title="Edit vendor info"
                   >
                     <Edit3 className="h-4 w-4" />
                   </button>
@@ -403,7 +403,7 @@ export const Accounting: React.FC = () => {
               </div>
               <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
                 <Phone className="h-3 w-3 text-emerald-400" />
-                {settings?.vendorPhone ? `হোয়াটসঅ্যাপ: +${formatWhatsAppPhone(settings.vendorPhone)}` : <span className="text-amber-400">হোয়াটসঅ্যাপ নম্বর যোগ করা নেই</span>}
+                {settings?.vendorPhone ? `WhatsApp: +${formatWhatsAppPhone(settings.vendorPhone)}` : <span className="text-amber-400">No WhatsApp number added</span>}
               </p>
             </div>
           </div>
@@ -416,7 +416,7 @@ export const Accounting: React.FC = () => {
                 className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center gap-1.5 active:scale-95"
               >
                 <Phone className="h-3.5 w-3.5 text-emerald-400" />
-                <span>{settings?.vendorPhone ? 'নম্বর পরিবর্তন' : 'নম্বর যুক্ত করুন'}</span>
+                <span>{settings?.vendorPhone ? 'Change Number' : 'Add Number'}</span>
               </button>
             )}
 
@@ -427,7 +427,7 @@ export const Accounting: React.FC = () => {
               className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-900/40 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50"
             >
               <Send className="h-3.5 w-3.5" />
-              <span>{statementSending ? 'পাঠানো হচ্ছে...' : 'ভেন্ডরকে মাসিক হিসাব পাঠান'}</span>
+              <span>{statementSending ? 'Sending...' : 'Send Monthly Statement'}</span>
             </button>
           </div>
         </div>
@@ -435,31 +435,31 @@ export const Accounting: React.FC = () => {
         {/* Real-time Month Breakdown for Vendor */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-4 text-xs">
           <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">মোট মিল ({vendorBilling.monthName})</span>
-            <span className="text-base sm:text-lg font-black text-white">{vendorBilling.totalMeals} টি</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">রেট: ৳{formatMealRate(vendorBilling.mealRate)}</span>
+            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">Total Meals ({vendorBilling.monthName})</span>
+            <span className="text-base sm:text-lg font-black text-white">{vendorBilling.totalMeals} meals</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">Rate: ৳{formatMealRate(vendorBilling.mealRate)}/meal</span>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">মোট মিল বিল</span>
+            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">Total Meal Bill</span>
             <span className="text-base sm:text-lg font-black text-emerald-400">৳{vendorBilling.totalFoodCost.toLocaleString()}</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">খাদ্য বাবদ প্রদেয়</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">Payable for food</span>
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
-            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">পরিশোধ করা হয়েছে</span>
+            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">Total Paid</span>
             <span className="text-base sm:text-lg font-black text-amber-400">৳{totalPaid.toLocaleString()}</span>
-            <span className="text-[10px] text-slate-400 block mt-0.5">{sortedPayments.length} টি কিস্তিতে</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">{sortedPayments.length} installment(s)</span>
           </div>
 
           <div className={`border rounded-2xl p-3 ${vendorBilling.remainingDue > 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
             <span className="text-[10px] uppercase font-bold tracking-wider block mb-1">
-              {vendorBilling.remainingDue > 0 ? 'অবশিষ্ট বকেয়া' : 'অগ্রিম / পরিশোধিত'}
+              {vendorBilling.remainingDue > 0 ? 'Remaining Due' : 'Advance / Paid'}
             </span>
             <span className="text-base sm:text-lg font-black">
-              {vendorBilling.remainingDue > 0 ? `৳${vendorBilling.remainingDue.toLocaleString()}` : `৳${Math.abs(vendorBilling.remainingDue).toLocaleString()} (পরিশোধিত)`}
+              {vendorBilling.remainingDue > 0 ? `৳${vendorBilling.remainingDue.toLocaleString()}` : `৳${Math.abs(vendorBilling.remainingDue).toLocaleString()} (Paid)`}
             </span>
-            <span className="text-[10px] opacity-80 block mt-0.5">চলতি স্থিতি</span>
+            <span className="text-[10px] opacity-80 block mt-0.5">Current Standing</span>
           </div>
         </div>
       </div>
@@ -660,7 +660,7 @@ export const Accounting: React.FC = () => {
           <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <ChefHat className="h-5 w-5 text-emerald-600" /> ভেন্ডর / বাবুর্চি তথ্য
+                <ChefHat className="h-5 w-5 text-emerald-600" /> Food Vendor / Cook Details
               </h3>
               <button 
                 type="button" 
@@ -673,27 +673,27 @@ export const Accounting: React.FC = () => {
 
             <form onSubmit={handleSaveVendorInfo} className="space-y-4">
               <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">ভেন্ডর / বাবুর্চির নাম</label>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">Vendor / Cook Name</label>
                 <input 
                   type="text" 
                   value={vendorNameInput} 
                   onChange={e => setVendorNameInput(e.target.value)} 
-                  placeholder="যেমন: খালা / বাবুর্চি / বুয়া" 
+                  placeholder="e.g. Cook / Vendor Name" 
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm dark:text-white"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">হোয়াটসঅ্যাপ মোবাইল নম্বর</label>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">WhatsApp Mobile Number</label>
                 <input 
                   type="text" 
                   required
                   value={vendorPhoneInput} 
                   onChange={e => setVendorPhoneInput(e.target.value)} 
-                  placeholder="যেমন: 017xxxxxxxx বা 88017xxxxxxxx" 
+                  placeholder="e.g. 017xxxxxxxx or 88017xxxxxxxx" 
                   className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm dark:text-white"
                 />
-                <p className="text-[11px] text-slate-400 mt-1">পেমেন্ট করার সাথে সাথে এই নম্বরে স্বয়ংক্রিয় রসিদ যাবে।</p>
+                <p className="text-[11px] text-slate-400 mt-1">Automated WhatsApp receipts will be sent to this number upon payment.</p>
               </div>
 
               <div className="pt-2">
@@ -702,7 +702,7 @@ export const Accounting: React.FC = () => {
                   disabled={savingVendor}
                   className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50"
                 >
-                  {savingVendor ? 'সংরক্ষণ হচ্ছে...' : 'সংরক্ষণ করুন'}
+                  {savingVendor ? 'Saving...' : 'Save Details'}
                 </button>
               </div>
             </form>
@@ -713,10 +713,10 @@ export const Accounting: React.FC = () => {
       {/* Month-End Statement Confirmation Dialog */}
       <ConfirmModal
         isOpen={sendStatementConfirm}
-        title="ভেন্ডরকে মাসিক হিসাব পাঠাবেন?"
-        message={`${settings?.vendorName || 'ভেন্ডর'}-কে ${vendorBilling.monthName} মাসের মোট মিল (${vendorBilling.totalMeals} টি), মোট খাদ্য বিল (৳${vendorBilling.totalFoodCost.toLocaleString()}), মোট পরিশোধ (৳${totalPaid.toLocaleString()}) এবং বর্তমান স্থিতির পূর্ণাঙ্গ হোয়াটসঅ্যাপ বার্তা পাঠাতে চান?`}
-        confirmText="হ্যাঁ, পাঠান"
-        cancelText="বাতিল"
+        title="Send Monthly Statement to Vendor?"
+        message={`Send ${vendorBilling.monthName} statement (Total meals: ${vendorBilling.totalMeals}, Total bill: ৳${vendorBilling.totalFoodCost.toLocaleString()}, Paid: ৳${totalPaid.toLocaleString()}) to ${settings?.vendorName || 'vendor'} via WhatsApp?`}
+        confirmText="Yes, Send"
+        cancelText="Cancel"
         variant="emerald"
         onConfirm={handleSendVendorStatement}
         onCancel={() => setSendStatementConfirm(false)}
@@ -725,10 +725,10 @@ export const Accounting: React.FC = () => {
       {/* Delete Confirmation Dialog */}
       <ConfirmModal
         isOpen={deleteConfirm.isOpen}
-        title="পেমেন্ট রেকর্ড মুছে ফেলবেন?"
-        message={`ভেন্ডরকে প্রদত্ত ৳${deleteConfirm.payAmount} টাকার এই পেমেন্ট রেকর্ডটি স্থায়ীভাবে মুছে ফেলতে চান?`}
-        confirmText="মুছে ফেলুন"
-        cancelText="বাতিল"
+        title="Delete Payment Record?"
+        message={`Are you sure you want to permanently delete this payment record of ৳${deleteConfirm.payAmount}?`}
+        confirmText="Delete"
+        cancelText="Cancel"
         variant="rose"
         onConfirm={confirmDeletePayment}
         onCancel={() => setDeleteConfirm(prev => ({ ...prev, isOpen: false }))}

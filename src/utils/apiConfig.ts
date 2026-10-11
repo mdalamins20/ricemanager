@@ -86,7 +86,7 @@ export const testWhatsAppServerConnection = async (baseUrl: string): Promise<{
   } catch (err: any) {
     return {
       success: false,
-      error: err.name === 'TimeoutError' ? 'সার্ভারে কানেক্ট হতে সময় বেশি নিচ্ছে (Timeout)' : (err.message || 'কানেকশন ব্যর্থ হয়েছে')
+      error: err.name === 'TimeoutError' ? 'Server connection timed out' : (err.message || 'Connection failed')
     };
   }
 };

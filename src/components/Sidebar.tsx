@@ -44,6 +44,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
     navigate('/login');
   };
 
+  const visibleNavItems = user ? NavItems : NavItems.filter(item => item.path === '/reports');
+
   return (
     <aside className="w-64 h-screen fixed left-0 top-0 flex flex-col z-20 hidden md:flex border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition-colors duration-300">
       <div className="p-6 border-b border-slate-100 dark:border-slate-800">
@@ -56,7 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
       </div>
       
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-        {NavItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
@@ -131,21 +133,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
         {/* Install App Button for Desktop */}
         <InstallPWA className="w-full justify-center bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700" />
 
-        {user ? (
+        {user && (
           <button 
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-600 dark:hover:text-emerald-400 w-full rounded-xl transition-all group"
           >
             <LogOut className="h-5 w-5 group-hover:translate-x-1 transition-transform stroke-[1.5px]" />
             Sign Out
-          </button>
-        ) : (
-          <button 
-            onClick={handleLogin}
-            className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 w-full rounded-xl transition-all shadow-md shadow-emerald-200 dark:shadow-emerald-900/20"
-          >
-            <LogIn className="h-5 w-5 stroke-[2px]" />
-            Log In
           </button>
         )}
       </div>
@@ -154,10 +148,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ isDark, toggleTheme }) => {
 };
 
 export const BottomNav: React.FC = () => {
+  const [user, setUser] = useState<firebase.User | null>(auth.currentUser);
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const visibleNavItems = user ? NavItems : NavItems.filter(item => item.path === '/reports');
+
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 md:hidden z-[100] pb-safe shadow-[0_-8px_30px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.4)] transition-all duration-300">
       <div className="flex justify-around items-center h-16 px-1">
-        {NavItems.map((item) => (
+        {visibleNavItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}

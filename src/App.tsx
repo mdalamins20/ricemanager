@@ -19,7 +19,7 @@ const Money = React.lazy(() => import('./pages/Money').then(m => ({ default: m.M
 const ViewReport = React.lazy(() => import('./pages/ViewReport').then(m => ({ default: m.ViewReport })));
 const Accounting = React.lazy(() => import('./pages/Accounting').then(m => ({ default: m.Accounting })));
 
-// Protected Route Wrapper (Only for Admin pages like Settings)
+// Protected Route Wrapper (Redirects to /reports when not logged in)
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<firebase.User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +33,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   }, []);
 
   if (loading) return null;
-  if (!user) return <Navigate to="/login" replace />;
+  if (!user) return <Navigate to="/reports" replace />;
 
   return <>{children}</>;
 };
@@ -63,21 +63,44 @@ const App: React.FC = () => {
             <Routes>
               <Route path="/login" element={<Login />} />
               
-              {/* Public Routes (Read Access for Everyone) */}
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/members" element={<Members />} />
-              <Route path="/meals" element={<MealEntry />} />
-              <Route path="/money" element={<Money />} />
+              {/* Public Route (Accessible by all, read-only restricted for visitors) */}
               <Route path="/reports" element={<Reports />} />
-              <Route path="/view-report" element={<ViewReport />} />
-              <Route path="/accounting" element={<Accounting />} />
               
-              {/* Protected Routes (Admin Only) */}
+              {/* Protected Routes (Admin only - Logged-out users redirect to /reports) */}
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              } />
+              <Route path="/members" element={
+                <ProtectedRoute>
+                  <Members />
+                </ProtectedRoute>
+              } />
+              <Route path="/meals" element={
+                <ProtectedRoute>
+                  <MealEntry />
+                </ProtectedRoute>
+              } />
+              <Route path="/money" element={
+                <ProtectedRoute>
+                  <Money />
+                </ProtectedRoute>
+              } />
+              <Route path="/accounting" element={
+                <ProtectedRoute>
+                  <Accounting />
+                </ProtectedRoute>
+              } />
+              <Route path="/view-report" element={<ViewReport />} />
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <Settings />
                 </ProtectedRoute>
               } />
+
+              {/* Catch-all redirect to /reports */}
+              <Route path="*" element={<Navigate to="/reports" replace />} />
             </Routes>
           </Suspense>
         </Layout>

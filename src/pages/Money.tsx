@@ -193,7 +193,7 @@ export const Money: React.FC = () => {
       // Immediate modal close and form reset so UI never gets stuck
       setIsModalOpen(false);
       setFormData(prev => ({ ...prev, amount: '', note: '', type: 'advance' }));
-      showToast('success', `✅ ${memberName}-এর ৳${depositAmount} জমা সংরক্ষণ করা হয়েছে!`);
+      showToast('success', `✅ Deposit of ৳${depositAmount} for ${memberName} saved successfully!`);
 
       // Non-blocking log action
       logAction('Add Deposit', `Added ${depositAmount} BDT (${depositType}) for ${memberName}`).catch(console.error);
@@ -217,7 +217,7 @@ export const Money: React.FC = () => {
       }
     } catch (error) {
       console.error('Error saving deposit:', error);
-      showToast('error', 'জমা সংরক্ষণ করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+      showToast('error', 'Failed to save deposit. Please try again.');
     }
   };
 
@@ -232,11 +232,11 @@ export const Money: React.FC = () => {
     try {
       await db.collection('deposits').doc(dep.id).delete();
       setDeleteModal({ isOpen: false, deposit: null });
-      showToast('success', `জমা রেকর্ড সফলভাবে মুছে ফেলা হয়েছে।`);
+      showToast('success', `Deposit record deleted successfully.`);
       logAction('Delete Deposit', `Removed deposit of ${dep.amount} BDT for ${dep.memberName}`).catch(console.error);
     } catch(err) {
       console.error('Error deleting deposit:', err);
-      showToast('error', 'জমা মুছতে সমস্যা হয়েছে।');
+      showToast('error', 'Failed to delete deposit record.');
     }
   };
 

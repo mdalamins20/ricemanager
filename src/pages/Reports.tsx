@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import firebase from 'firebase/compat/app';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { format } from 'date-fns';
 import { Banknote, Calendar, ChevronDown, ChevronRight, Download, MessageCircle } from 'lucide-react';
 import { AppSettings, Deposit, DailyMealDoc, Member } from '../types';
@@ -15,6 +15,13 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { getWhatsAppApiUrl, getApiHeaders } from '../utils/apiConfig';
 
 export const Reports: React.FC = () => {
+  const [user, setUser] = useState<firebase.User | null>(auth.currentUser);
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => setUser(u));
+    return () => unsub();
+  }, []);
+
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
@@ -184,7 +191,7 @@ export const Reports: React.FC = () => {
           const phone = formatWhatsAppPhone(item.phone);
 
           if (!phone) {
-              showToast('warning', `⚠️ "${item.memberName}"-এর কোনো সঠিক মোবাইল নম্বর পাওয়া যায়নি! মেম্বার প্রোফাইলে নম্বর দিন।`);
+              showToast('warning', `⚠️ No valid mobile number found for "${item.memberName}"! Please add phone in member profile.`);
               setSendingId(null);
               return;
           }
@@ -213,7 +220,7 @@ export const Reports: React.FC = () => {
               const data = await res.json();
               if (data && data.success) {
                   sentDirectly = true;
-                  showToast('success', `✅ ${item.memberName}-এর হোয়াটসঅ্যাপে (${phone}) সরাসরি PDF ইনভয়েস পাঠানো হয়েছে!`);
+                  showToast('success', `✅ PDF invoice sent directly to ${item.memberName} (${phone}) via WhatsApp!`);
               }
           } catch (e) {
               // Local bot offline, proceed to web fallback
@@ -224,96 +231,10 @@ export const Reports: React.FC = () => {
           }
       } catch (error) {
           console.error("WhatsApp Link Sharing failed:", error);
-          showToast('error', "ইনভয়েস লিংক তৈরি করা সম্ভব হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।");
+          showToast('error', "Failed to create invoice link. Please check internet connection.");
       } finally {
           setSendingId(null);
       }
-  };
-
-  const [broadcastLoading, setBroadcastLoading] = useState(false);
-  const [broadcastProgress, setBroadcastProgress] = useState<{ current: number; total: number } | null>(null);
-
-  const startBroadcastProcess = async () => {
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
-    setBroadcastLoading(true);
-    let successCount = 0;
-    let failCount = 0;
-
-    for (let i = 0; i < reportData.length; i++) {
-      const item = reportData[i];
-      setBroadcastProgress({ current: i + 1, total: reportData.length });
-
-      const phone = formatWhatsAppPhone(item.phone);
-      if (!phone) {
-        failCount++;
-        continue;
-      }
-
-      try {
-        const { generatePDF } = await import('../utils/pdfGenerator');
-        const doc = await generatePDF(item, selectedMonth, currentMonthRate);
-        const pdfBase64 = doc.output('datauristring').split(',')[1];
-
-        const [yStr, mStr] = selectedMonth.split('-');
-        const monthDate = new Date(parseInt(yStr, 10), parseInt(mStr, 10) - 1, 1);
-        const monthName = format(monthDate, 'MMMM');
-
-        const reportRef = await db.collection('shared_reports').add({
-          memberName: item.memberName,
-          month: monthName,
-          pdfBase64: pdfBase64,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-
-        const cleanPath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
-        const reportLink = `${window.location.origin}${cleanPath}/#/view-report?id=${reportRef.id}`;
-        const currentDeposit = item.advanceDeposit + item.finalDeposit;
-
-        const broadcastApiBase = getWhatsAppApiUrl(settings);
-        const res = await fetch(`${broadcastApiBase}/api/monthly-statement`, {
-          method: 'POST',
-          headers: getApiHeaders(),
-          body: JSON.stringify({
-            memberName: item.memberName,
-            phone: phone,
-            monthName: monthName,
-            totalMeals: item.totalMeals,
-            mealRate: currentMonthRate,
-            totalCost: item.totalCost,
-            prevBalance: item.prevBalance,
-            totalDeposit: currentDeposit,
-            currentBalance: item.currentBalance,
-            invoiceUrl: reportLink,
-            pdfBase64: pdfBase64
-          })
-        });
-
-        const data = await res.json();
-        if (data && data.success) {
-          successCount++;
-        } else {
-          failCount++;
-        }
-      } catch (err) {
-        failCount++;
-      }
-
-      await new Promise(r => setTimeout(r, 1200));
-    }
-
-    setBroadcastLoading(false);
-    setBroadcastProgress(null);
-    showToast('success', `হোয়াটসঅ্যাপ বার্তা পাঠানো সম্পন্ন! সফল: ${successCount} জন, ব্যর্থ: ${failCount} জন`);
-  };
-
-  const handleBroadcastAll = () => {
-    if (!reportData || reportData.length === 0) return;
-    setConfirmModal({
-      isOpen: true,
-      title: 'হোয়াটসঅ্যাপে সকল মেম্বারকে হিসাব পাঠান',
-      message: `মোট ${reportData.length} জন সক্রিয় মেম্বারের কাছে স্বয়ংক্রিয়ভাবে চলতি মাসের হিসাব ও পিডিএফ ইনভয়েস লিংক পাঠিয়ে দেওয়া হবে। আপনি কি নিশ্চিত?`,
-      onConfirm: startBroadcastProcess
-    });
   };
 
   const exportCSV = () => {
@@ -363,36 +284,15 @@ export const Reports: React.FC = () => {
           </div>
           <div className="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
              <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
-             <button 
-               onClick={handleBroadcastAll} 
-               disabled={broadcastLoading}
-               className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-2xl shadow-sm text-xs sm:text-sm font-bold transition-all active:scale-95"
-               title="স্বয়ংক্রিয় হোয়াটসঅ্যাপ বট দিয়ে সকলকে বিল বিবরণী পাঠান"
-             >
-                <MessageCircle className="h-4 w-4" /> 
-                <span>{broadcastLoading ? `পাঠানো হচ্ছে (${broadcastProgress?.current}/${broadcastProgress?.total})...` : 'সকলকে পাঠান'}</span>
-             </button>
-             <button onClick={exportCSV} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-2xl shadow-sm text-xs sm:text-sm font-bold transition-all active:scale-95">
-                <Download className="h-4 w-4" /> <span>Export CSV</span>
-             </button>
+             {user && (
+               <button onClick={exportCSV} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-2xl shadow-sm text-xs sm:text-sm font-bold transition-all active:scale-95">
+                  <Download className="h-4 w-4" /> <span>Export CSV</span>
+               </button>
+             )}
           </div>
        </div>
 
        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 sm:space-y-6 pb-10">
-       {/* Automatic Month-End Dispatch Notice Banner */}
-       <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-            <span className="text-emerald-900 dark:text-emerald-200 font-medium">
-              <strong className="font-extrabold text-emerald-700 dark:text-emerald-300">ফুল-অটোমেশন সক্রিয়:</strong> মাসের শেষ তারিখ সন্ধ্যা ৬:৩০ মিনিটে সকল মেম্বারের হোয়াটসঅ্যাপে সরাসরি রঙিন PDF ইনভয়েস অ্যাটাচমেন্ট সহ হিসাব স্বয়ংক্রিয়ভাবে চলে যাবে।
-            </span>
-          </div>
-          <span className="hidden md:inline-block px-2.5 py-1 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0">
-            AUTO: 18:30 BD
-          </span>
-       </div>
-
-       {/* Top Stats Grid - Mobile 2-column & Desktop 5-column */}
        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
            <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden">
                <div className="relative z-10">
@@ -451,8 +351,12 @@ export const Reports: React.FC = () => {
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Meals</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Cost</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-right">Curr. Bal</th>
-                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Receipt</th>
-                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">WhatsApp</th>
+                       {user && (
+                         <>
+                           <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Receipt</th>
+                           <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">WhatsApp</th>
+                         </>
+                       )}
                    </tr>
                </thead>
                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -553,18 +457,21 @@ export const Reports: React.FC = () => {
                      </div>
                  </div>
 
-                 <div className="flex items-center gap-2">
-                     <button onClick={(e) => { e.stopPropagation(); downloadReceipt(item); }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-all active:scale-95">
-                         <Download className="h-3.5 w-3.5" /> Receipt PDF
-                     </button>
-                     <button 
-                       disabled={sendingId !== null}
-                       onClick={(e) => { e.stopPropagation(); sendWhatsApp(item); }} 
-                       className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-200/40 dark:shadow-none transition-all active:scale-95 disabled:opacity-50"
-                     >
-                         {sendingId === item.memberId ? <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <><MessageCircle className="h-3.5 w-3.5" /> WhatsApp</>}
-                     </button>
-                 </div>
+                 
+                  {user && (
+                    <div className="flex items-center gap-2">
+                      <button onClick={(e) => { e.stopPropagation(); downloadReceipt(item); }} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-xs transition-all active:scale-95">
+                          <Download className="h-3.5 w-3.5" /> Receipt PDF
+                      </button>
+                      <button 
+                        disabled={sendingId !== null}
+                        onClick={(e) => { e.stopPropagation(); sendWhatsApp(item); }} 
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-200/40 dark:shadow-none transition-all active:scale-95 disabled:opacity-50"
+                      >
+                          {sendingId === item.memberId ? <div className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <><MessageCircle className="h-3.5 w-3.5" /> WhatsApp</>}
+                      </button>
+                    </div>
+                  )}
 
                  {isExpanded && (
                     <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700 grid grid-cols-2 gap-y-3 text-xs animate-in slide-in-from-top-2 fade-in">

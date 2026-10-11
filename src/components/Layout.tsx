@@ -132,7 +132,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                 
                 <InstallPWA className="mr-1 text-[11px] py-1 px-2.5 font-bold rounded-xl" />
   
-                {user ? (
+                {user && (
                   <>
                      <button onClick={() => navigate('/settings')} className="h-9 w-9 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full active:scale-90 transition-all">
                         <Settings className="h-5 w-5 stroke-[1.8px]" />
@@ -141,10 +141,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                         <LogOut className="h-5 w-5 stroke-[1.8px]" />
                      </button>
                   </>
-                ) : (
-                  <button onClick={() => navigate('/login')} className="h-9 w-9 flex items-center justify-center text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 rounded-full active:scale-90 transition-all">
-                      <LogIn className="h-4.5 w-4.5" />
-                  </button>
                 )}
              </div>
           </div>
