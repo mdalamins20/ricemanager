@@ -20,6 +20,39 @@ app.use(cors());
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
+// Lightweight in-memory rate limiter to prevent spam attacks / bot floods
+const requestCounts = new Map();
+app.use((req, res, next) => {
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const now = Date.now();
+  const windowMs = 60 * 1000;
+  const maxRequests = 120; // 120 requests per minute per IP
+
+  const record = requestCounts.get(ip) || { count: 0, startTime: now };
+  if (now - record.startTime > windowMs) {
+    record.count = 1;
+    record.startTime = now;
+  } else {
+    record.count++;
+  }
+  requestCounts.set(ip, record);
+
+  if (record.count > maxRequests) {
+    return res.status(429).json({ success: false, error: 'Too many requests. Please slow down.' });
+  }
+  next();
+});
+
+// Periodic cleanup for rate limiter map
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of requestCounts.entries()) {
+    if (now - record.startTime > 120000) {
+      requestCounts.delete(ip);
+    }
+  }
+}, 60000);
+
 // Session & State
 const AUTH_DIR = path.join(__dirname, 'auth_info_baileys');
 if (!fs.existsSync(AUTH_DIR)) {

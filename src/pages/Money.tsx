@@ -170,6 +170,10 @@ export const Money: React.FC = () => {
     if (!user || !formData.memberId || !formData.amount) return;
     
     const depositAmount = Number(formData.amount);
+    if (isNaN(depositAmount) || depositAmount <= 0) {
+      showToast('error', 'Please enter a valid positive deposit amount.');
+      return;
+    }
     const memberId = formData.memberId;
     const targetMonth = formData.targetMonth;
     const depositType = formData.type;

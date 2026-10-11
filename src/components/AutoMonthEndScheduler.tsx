@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { format } from 'date-fns';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import firebase from 'firebase/compat/app';
 import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
 import { getMealRateForMonth } from '../utils/pricing';
@@ -18,7 +18,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
 
   useEffect(() => {
     const checkAndTriggerMonthEnd = async () => {
-      if (isRunningRef.current) return;
+      if (!auth.currentUser || isRunningRef.current) return;
 
       const now = new Date();
       const currentMonthKey = format(now, 'yyyy-MM');

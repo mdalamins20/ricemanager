@@ -72,10 +72,10 @@ export const ViewReport: React.FC = () => {
                 <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Oops!</h2>
                 <p className="text-slate-500 dark:text-slate-400 max-w-xs">{error}</p>
                 <button 
-                    onClick={() => window.location.href = '#/'} 
+                    onClick={() => window.location.hash = '#/reports'} 
                     className="px-6 py-3 bg-slate-800 text-white rounded-2xl font-bold transition-all active:scale-95"
                 >
-                    Back to Home
+                    Back to Reports
                 </button>
             </div>
         );

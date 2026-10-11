@@ -56,7 +56,7 @@ const App: React.FC = () => {
 
   return (
     <AppProviders>
-      <AutoMonthEndScheduler />
+      {user && <AutoMonthEndScheduler />}
       <HashRouter>
         <Layout>
           <Suspense fallback={<LoadingFallback />}>

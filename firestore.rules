@@ -2,13 +2,61 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    function isAuthenticated() {
+    // Helper function to check if the user is authenticated as an Admin
+    function isAdmin() {
       return request.auth != null;
     }
 
-    match /{document=**} {
+    // 1. Members Collection: Public can view for monthly reports calculation, only Admin can manage
+    match /members/{memberId} {
       allow read: if true;
-      allow write: if isAuthenticated();
+      allow create, update: if isAdmin() 
+        && request.resource.data.fullName is string 
+        && request.resource.data.fullName.size() > 0;
+      allow delete: if isAdmin();
+    }
+
+    // 2. Daily Meals Collection: Public can view daily meal logs for reports, only Admin can record/edit
+    match /meals/{date} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 3. Member Deposits: Public can view deposit sums for balance report, only Admin can add/edit/delete
+    match /deposits/{depositId} {
+      allow read: if true;
+      allow create, update: if isAdmin() 
+        && request.resource.data.amount is number 
+        && request.resource.data.amount > 0;
+      allow delete: if isAdmin();
+    }
+
+    // 4. Food Vendor Payments: Public can view totals in monthly reports, only Admin can add/delete
+    match /vendor_payments/{paymentId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 5. System Settings & Rates (config doc): Public can view rates for calculation, only Admin can modify
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // 6. Shared Digital Invoices / Vouchers: Public can view via generated voucher links, only Admin can publish
+    match /shared_reports/{reportId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // 7. System Audit Logs: STRICTLY ADMIN ONLY (Visitors cannot read or write audit logs)
+    match /logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    // 8. Explicit Default Deny for any unlisted collections or paths
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

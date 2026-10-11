@@ -2,14 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { Member } from '../../types';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, parseISO } from 'date-fns';
 import { 
-  X, Calendar, SunMedium, MoonStar, Phone, MessageCircle, 
+  X, Calendar, SunMedium, MoonStar, 
   Utensils, Wallet, TrendingUp, TrendingDown,
   ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useMeals, useDeposits, useSettings } from '../../contexts';
 import { MonthPicker } from '../MonthPicker';
 import { getMealRateForMonth, calculateMealCost, formatMealRate } from '../../utils/pricing';
-import { formatWhatsAppPhone } from '../../utils/phone';
 
 interface MemberHistoryProps {
   member: Member;
@@ -193,35 +192,6 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
                 <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${member.status === 'active' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30' : 'bg-slate-500/15 text-slate-700 dark:text-slate-400 border-slate-500/30'}`}>
                   {member.status}
                 </span>
-              </div>
-              
-              <div className="flex items-center gap-2 mt-0.5">
-                {member.phone && (
-                  <p className="text-xs text-slate-600 dark:text-slate-400 flex items-center gap-1 font-semibold">
-                    <Phone className="h-3 w-3 text-emerald-500" />
-                    <span>{member.phone}</span>
-                  </p>
-                )}
-                {member.phone && (
-                  <div className="flex items-center gap-1.5 ml-1">
-                    <a 
-                      href={`tel:${member.phone}`} 
-                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                      title="Call"
-                    >
-                      <Phone className="h-3 w-3" />
-                    </a>
-                    <a 
-                      href={`https://wa.me/${formatWhatsAppPhone(member.phone)}`} 
-                      target="_blank" 
-                      rel="noreferrer"
-                      className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
-                      title="WhatsApp"
-                    >
-                      <MessageCircle className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
               </div>
             </div>
           </div>

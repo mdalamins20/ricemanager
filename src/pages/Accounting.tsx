@@ -265,6 +265,7 @@ export const Accounting: React.FC = () => {
   };
 
   const handleDelete = (id: string, payAmount: number) => {
+    if (!user) return;
     setDeleteConfirm({
       isOpen: true,
       id,
@@ -273,6 +274,7 @@ export const Accounting: React.FC = () => {
   };
 
   const confirmDeletePayment = async () => {
+    if (!user) return;
     const { id, payAmount } = deleteConfirm;
     setDeleteConfirm({ isOpen: false, id: '', payAmount: 0 });
     try {

@@ -171,7 +171,7 @@ export const Members: React.FC = () => {
       }
 
       await db.collection('members').doc(member.id).delete();
-      await logAction('Delete Member', `Deleted member ${member.fullName} (Final Balance: ${netBalance})`);
+      logAction('Delete Member', `Deleted member ${member.fullName} (Final Balance: ${netBalance})`).catch(console.error);
       setDeleteModal({ isOpen: false, member: null, loading: false });
 
     } catch (err) {

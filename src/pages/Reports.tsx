@@ -132,12 +132,14 @@ export const Reports: React.FC = () => {
 
 
   const downloadReceipt = async (item: MemberReport) => {
+    if (!user) return;
     const { generatePDF } = await import('../utils/pdfGenerator');
     const doc = await generatePDF(item, selectedMonth, currentMonthRate);
     doc.save(`Report_${item.memberName}_${selectedMonth}.pdf`);
   };
 
   const sendWhatsApp = async (item: MemberReport) => {
+      if (!user) return;
       setSendingId(item.memberId);
       try {
           const { generatePDF } = await import('../utils/pdfGenerator');
@@ -238,9 +240,10 @@ export const Reports: React.FC = () => {
   };
 
   const exportCSV = () => {
+    if (!user) return;
     const headers = ['Member Name', 'Prev. Balance', 'Deposit', 'Total Available', 'Total Meals', 'Total Cost', 'Current Balance'];
     const rows = reportData.map(item => [
-      item.memberName,
+      `"${String(item.memberName || '').replace(/"/g, '""')}"`,
       item.prevBalance,
       item.advanceDeposit + item.finalDeposit,
       item.remainingDeposit,
@@ -390,21 +393,25 @@ export const Reports: React.FC = () => {
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalMeals}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalCost}</td>
                            <td className={`px-4 py-3 text-right font-bold ${item.currentBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.currentBalance}</td>
-                           <td className="px-4 py-3 text-center">
-                               <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full transition-colors" title="Download PDF Statement">
-                                   <Download className="h-4 w-4" />
-                               </button>
-                           </td>
-                           <td className="px-4 py-3 text-center">
-                               <button 
-                                 disabled={sendingId !== null}
-                                 onClick={() => sendWhatsApp(item)} 
-                                 className="p-2 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full transition-colors disabled:opacity-50"
-                                 title="Send on WhatsApp"
-                               >
-                                   {sendingId === item.memberId ? <div className="h-4 w-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div> : <MessageCircle className="h-4 w-4" />}
-                               </button>
-                           </td>
+                           {user && (
+                             <>
+                               <td className="px-4 py-3 text-center">
+                                   <button onClick={() => downloadReceipt(item)} className="p-2 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full transition-colors" title="Download PDF Statement">
+                                       <Download className="h-4 w-4" />
+                                   </button>
+                               </td>
+                               <td className="px-4 py-3 text-center">
+                                   <button 
+                                     disabled={sendingId !== null}
+                                     onClick={() => sendWhatsApp(item)} 
+                                     className="p-2 text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-full transition-colors disabled:opacity-50"
+                                     title="Send on WhatsApp"
+                                   >
+                                       {sendingId === item.memberId ? <div className="h-4 w-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div> : <MessageCircle className="h-4 w-4" />}
+                                   </button>
+                               </td>
+                             </>
+                           )}
                        </tr>
                    ))}
                </tbody>

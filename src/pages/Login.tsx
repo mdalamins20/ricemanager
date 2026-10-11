@@ -16,6 +16,12 @@ export const Login: React.FC = () => {
 
   const navigate = useNavigate();
 
+  React.useEffect(() => {
+    if (auth.currentUser) {
+      navigate('/');
+    }
+  }, [navigate]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -25,7 +31,7 @@ export const Login: React.FC = () => {
     try {
       // Normal Login
       await auth.signInWithEmailAndPassword(email, password);
-      await logAction('Login', 'User signed in successfully');
+      logAction('Login', 'User signed in successfully').catch(console.error);
       navigate('/');
     } catch (err: any) {
       console.error(err);
