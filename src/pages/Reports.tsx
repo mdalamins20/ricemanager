@@ -5,25 +5,51 @@ import { format } from 'date-fns';
 import { Banknote, Calendar, ChevronDown, ChevronRight, Download, MessageCircle } from 'lucide-react';
 import { AppSettings, Deposit, DailyMealDoc, Member } from '../types';
 import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
-import { generatePDF, MemberReport, DailyLog } from '../utils/pdfGenerator';
+import type { MemberReport, DailyLog } from '../utils/pdfGenerator';
 import { MemberHistory } from '../components/Members/MemberHistory';
 import { MonthPicker } from '../components/MonthPicker';
+import { getMealRateForMonth, calculateMealCost, formatMealRate } from '../utils/pricing';
+import { formatWhatsAppPhone } from '../utils/phone';
+import { Toast } from '../components/Toast';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { getWhatsAppApiUrl, getApiHeaders } from '../utils/apiConfig';
 
 export const Reports: React.FC = () => {
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [viewMember, setViewMember] = useState<Member | null>(null);
+  const [toast, setToast] = useState<{ show: boolean; type: 'success' | 'error' | 'warning' | 'info'; message: string }>({
+    show: false,
+    type: 'success',
+    message: ''
+  });
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
+
+  const showToast = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
+    setToast({ show: true, type, message });
+  };
   const { members, loading: membersLoading } = useMembers();
   const { allMeals, loading: mealsLoading } = useMeals();
   const { allDeposits, loading: depositsLoading } = useDeposits();
   const { settings, loading: settingsLoading } = useSettings();
   const loading = membersLoading || mealsLoading || depositsLoading || settingsLoading;
+  const currentMonthRate = getMealRateForMonth(settings, selectedMonth);
 
   const reportData = useMemo(() => {
     if (loading) return [];
     
-    const currentPrice = settings?.mealPrice || 65;
+    const currentPrice = getMealRateForMonth(settings, selectedMonth);
     const membersList = members
       .filter(m => m.status === 'active')
       .sort((a, b) => a.fullName.localeCompare(b.fullName));
@@ -31,20 +57,19 @@ export const Reports: React.FC = () => {
     return membersList.map(member => {
       const startStr = format(new Date(parseInt(selectedMonth.split('-')[0]), parseInt(selectedMonth.split('-')[1]) - 1, 1), 'yyyy-MM-dd');
       
-      let prevTotalDeposit = 0, prevTotalMeals = 0;
+      let prevTotalDeposit = 0, prevTotalMealCost = 0;
       allDeposits.forEach(d => { if (d.memberId === member.id && d.date < startStr) prevTotalDeposit += d.amount; });
       allMeals.forEach(mDoc => {
          if (mDoc.date < startStr) {
             const entry = mDoc.entries?.[member.id];
             if (entry) { 
-              if (entry.lunch) prevTotalMeals++; 
-              if (entry.dinner) prevTotalMeals++; 
-              prevTotalMeals += Number(entry.guestLunch) || 0;
-              prevTotalMeals += Number(entry.guestDinner) || 0;
+              const meals = (entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0) + (Number(entry.guestLunch) || 0) + (Number(entry.guestDinner) || 0);
+              const pastMonthRate = getMealRateForMonth(settings, mDoc.date.slice(0, 7));
+              prevTotalMealCost += calculateMealCost(meals, pastMonthRate);
             }
          }
       });
-      const prevBalance = prevTotalDeposit - (prevTotalMeals * currentPrice);
+      const prevBalance = Math.round(prevTotalDeposit - prevTotalMealCost);
 
       let advanceDeposit = 0, finalDeposit = 0, currentMonthMeals = 0;
       const dailyLogs: DailyLog[] = [];
@@ -77,7 +102,7 @@ export const Reports: React.FC = () => {
       });
 
       const remainingDeposit = prevBalance + advanceDeposit + finalDeposit;
-      const totalCost = currentMonthMeals * currentPrice;
+      const totalCost = calculateMealCost(currentMonthMeals, currentPrice);
       const currentBalance = remainingDeposit - totalCost;
 
       return { 
@@ -100,14 +125,16 @@ export const Reports: React.FC = () => {
 
 
   const downloadReceipt = async (item: MemberReport) => {
-    const doc = await generatePDF(item, selectedMonth);
+    const { generatePDF } = await import('../utils/pdfGenerator');
+    const doc = await generatePDF(item, selectedMonth, currentMonthRate);
     doc.save(`Report_${item.memberName}_${selectedMonth}.pdf`);
   };
 
   const sendWhatsApp = async (item: MemberReport) => {
       setSendingId(item.memberId);
       try {
-          const doc = await generatePDF(item, selectedMonth);
+          const { generatePDF } = await import('../utils/pdfGenerator');
+          const doc = await generatePDF(item, selectedMonth, currentMonthRate);
           // Convert PDF to Base64 string
           const pdfBase64 = doc.output('datauristring').split(',')[1];
           
@@ -125,48 +152,176 @@ export const Reports: React.FC = () => {
 
           // Generate the application link
           // Since we use HashRouter, the link format is: url#/view-report?id=ID
-          const baseUrl = window.location.origin + window.location.pathname + window.location.search;
-          const reportLink = `${baseUrl}#/view-report?id=${reportRef.id}`;
+          const cleanPath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
+          const reportLink = `${window.location.origin}${cleanPath}/#/view-report?id=${reportRef.id}`;
 
           const isDue = item.currentBalance < 0;
-          
-          const urgentNote = isDue 
-              ? `*[ জরুরী নোটিশ ]*\nআপনার মোট ${Math.abs(item.currentBalance)} টাকা বকেয়া (Due) রয়েছে। দয়া করে অতি দ্রুত আপনার বকেয়া টাকা পরিশোধ করুন।`
-              : `*[ STATUS: CLEAR ]*\nআপনার কোনো বকেয়া নেই।`;
+          const standingText = isDue 
+              ? `🚨 বকেয়া পাওনা: ৳${Math.abs(item.currentBalance)}`
+              : `✅ উদ্বৃত্ত জমা: ৳${Math.abs(item.currentBalance)}`;
 
           const currentDeposit = item.advanceDeposit + item.finalDeposit;
-          const prevText = item.prevBalance < 0 ? 'Prev. Due:' : 'Prev. Balance:';
+          const prevBalanceSign = item.prevBalance >= 0 ? '+' : '-';
 
-          const message = `*MONTHLY STATEMENT | ${monthName.toUpperCase()}*\n\n` +
-              `*Name:* ${item.memberName}\n` +
-              `------------------------\n` +
-              `• Total Meals:   ${item.totalMeals}\n` +
-              `• Total Bill:    ${item.totalCost} TK\n` +
-              `• ${prevText.padEnd(14)} ${Math.abs(item.prevBalance)} TK\n` +
-              `• Curr. Deposit: ${currentDeposit} TK\n` +
-              `------------------------\n` +
-              `*Net Balance:  ${item.currentBalance} TK*\n\n` +
-              `*Download Full Invoice:*\n${reportLink}\n\n` +
-              `${urgentNote}`;
+          const message = 
+              `📋 *মাসিক মিল হিসাব বিবরণী | ${monthName.toUpperCase()}*\n\n` +
+              `আসসালামু আলাইকুম ${item.memberName}, আপনার ${monthName} মাসের সার্বিক মিল ও ব্যয়ের চূড়ান্ত হিসাব বিবরণী নিচে উপস্থাপন করা হলো:\n\n` +
+              `━━━━━━━━━━━━━━━━━━━\n` +
+              `📊 *হিসাবের সারসংক্ষেপ:*\n` +
+              `• 🍽️ *মোট মিল সংখ্যা:* ${item.totalMeals} টি\n` +
+              `• 🏷️ *গড় মিল রেট:* ৳${formatMealRate(currentMonthRate)} / মিল\n` +
+              `• 💸 *মোট মিল ব্যয়:* ৳${item.totalCost}\n` +
+              `• 💳 *পূর্ববর্তী জের:* ${prevBalanceSign}৳${Math.abs(item.prevBalance)}\n` +
+              `• 📥 *চলতি মাসে পরিশোধ:* ৳${currentDeposit}\n` +
+              `━━━━━━━━━━━━━━━━━━━\n` +
+              `📌 *বর্তমান হিসাব স্থিতি:* ${standingText}\n` +
+              `━━━━━━━━━━━━━━━━━━━\n\n` +
+              `📄 *অফিসিয়াল ডিজিটাল ভাউচার / ইনভয়েস:*\n${reportLink}\n\n` +
+              `_বিনীত,_\n` +
+              `*Meal Manager*`;
           
           const encodedMsg = encodeURIComponent(message);
-          const phone = item.phone.startsWith('0') ? '88' + item.phone : item.phone;
-          window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
+          const phone = formatWhatsAppPhone(item.phone);
+
+          if (!phone) {
+              showToast('warning', `⚠️ "${item.memberName}"-এর কোনো সঠিক মোবাইল নম্বর পাওয়া যায়নি! মেম্বার প্রোফাইলে নম্বর দিন।`);
+              setSendingId(null);
+              return;
+          }
+
+          // Check if WhatsApp bot is connected and send automatically
+          let sentDirectly = false;
+          const apiBase = getWhatsAppApiUrl(settings);
+          try {
+              const res = await fetch(`${apiBase}/api/monthly-statement`, {
+                  method: 'POST',
+                  headers: getApiHeaders(),
+                  body: JSON.stringify({
+                      memberName: item.memberName,
+                      phone: phone,
+                      monthName: monthName,
+                      totalMeals: item.totalMeals,
+                      mealRate: currentMonthRate,
+                      totalCost: item.totalCost,
+                      prevBalance: item.prevBalance,
+                      totalDeposit: currentDeposit,
+                      currentBalance: item.currentBalance,
+                      invoiceUrl: reportLink,
+                      pdfBase64: pdfBase64
+                  })
+              });
+              const data = await res.json();
+              if (data && data.success) {
+                  sentDirectly = true;
+                  showToast('success', `✅ ${item.memberName}-এর হোয়াটসঅ্যাপে (${phone}) সরাসরি PDF ইনভয়েস পাঠানো হয়েছে!`);
+              }
+          } catch (e) {
+              // Local bot offline, proceed to web fallback
+          }
+
+          if (!sentDirectly) {
+              window.open(`https://wa.me/${phone}?text=${encodedMsg}`, '_blank');
+          }
       } catch (error) {
           console.error("WhatsApp Link Sharing failed:", error);
-          alert("Failed to generate link. Check your internet.");
+          showToast('error', "ইনভয়েস লিংক তৈরি করা সম্ভব হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করুন।");
       } finally {
           setSendingId(null);
       }
   };
 
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [broadcastProgress, setBroadcastProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const startBroadcastProcess = async () => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+    setBroadcastLoading(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < reportData.length; i++) {
+      const item = reportData[i];
+      setBroadcastProgress({ current: i + 1, total: reportData.length });
+
+      const phone = formatWhatsAppPhone(item.phone);
+      if (!phone) {
+        failCount++;
+        continue;
+      }
+
+      try {
+        const { generatePDF } = await import('../utils/pdfGenerator');
+        const doc = await generatePDF(item, selectedMonth, currentMonthRate);
+        const pdfBase64 = doc.output('datauristring').split(',')[1];
+
+        const [yStr, mStr] = selectedMonth.split('-');
+        const monthDate = new Date(parseInt(yStr, 10), parseInt(mStr, 10) - 1, 1);
+        const monthName = format(monthDate, 'MMMM');
+
+        const reportRef = await db.collection('shared_reports').add({
+          memberName: item.memberName,
+          month: monthName,
+          pdfBase64: pdfBase64,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+
+        const cleanPath = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
+        const reportLink = `${window.location.origin}${cleanPath}/#/view-report?id=${reportRef.id}`;
+        const currentDeposit = item.advanceDeposit + item.finalDeposit;
+
+        const broadcastApiBase = getWhatsAppApiUrl(settings);
+        const res = await fetch(`${broadcastApiBase}/api/monthly-statement`, {
+          method: 'POST',
+          headers: getApiHeaders(),
+          body: JSON.stringify({
+            memberName: item.memberName,
+            phone: phone,
+            monthName: monthName,
+            totalMeals: item.totalMeals,
+            mealRate: currentMonthRate,
+            totalCost: item.totalCost,
+            prevBalance: item.prevBalance,
+            totalDeposit: currentDeposit,
+            currentBalance: item.currentBalance,
+            invoiceUrl: reportLink,
+            pdfBase64: pdfBase64
+          })
+        });
+
+        const data = await res.json();
+        if (data && data.success) {
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch (err) {
+        failCount++;
+      }
+
+      await new Promise(r => setTimeout(r, 1200));
+    }
+
+    setBroadcastLoading(false);
+    setBroadcastProgress(null);
+    showToast('success', `হোয়াটসঅ্যাপ বার্তা পাঠানো সম্পন্ন! সফল: ${successCount} জন, ব্যর্থ: ${failCount} জন`);
+  };
+
+  const handleBroadcastAll = () => {
+    if (!reportData || reportData.length === 0) return;
+    setConfirmModal({
+      isOpen: true,
+      title: 'হোয়াটসঅ্যাপে সকল মেম্বারকে হিসাব পাঠান',
+      message: `মোট ${reportData.length} জন সক্রিয় মেম্বারের কাছে স্বয়ংক্রিয়ভাবে চলতি মাসের হিসাব ও পিডিএফ ইনভয়েস লিংক পাঠিয়ে দেওয়া হবে। আপনি কি নিশ্চিত?`,
+      onConfirm: startBroadcastProcess
+    });
+  };
+
   const exportCSV = () => {
-    const headers = ['Member Name', 'Prev. Balance', 'Advance', 'Final Settlement', 'Total Available', 'Total Meals', 'Total Cost', 'Current Balance'];
+    const headers = ['Member Name', 'Prev. Balance', 'Deposit', 'Total Available', 'Total Meals', 'Total Cost', 'Current Balance'];
     const rows = reportData.map(item => [
       item.memberName,
       item.prevBalance,
-      item.advanceDeposit,
-      item.finalDeposit,
+      item.advanceDeposit + item.finalDeposit,
       item.remainingDeposit,
       item.totalMeals,
       item.totalCost,
@@ -206,15 +361,37 @@ export const Reports: React.FC = () => {
              <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-800 dark:text-white tracking-tight">Monthly Report</h2>
              <p className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-0.5">Meal & Billing Statement</p>
           </div>
-          <div className="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-2">
+          <div className="w-full sm:w-auto flex flex-wrap items-center justify-between sm:justify-end gap-2">
              <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
-             <button onClick={exportCSV} className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-sm text-xs sm:text-sm font-bold transition-all active:scale-95">
+             <button 
+               onClick={handleBroadcastAll} 
+               disabled={broadcastLoading}
+               className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-2xl shadow-sm text-xs sm:text-sm font-bold transition-all active:scale-95"
+               title="স্বয়ংক্রিয় হোয়াটসঅ্যাপ বট দিয়ে সকলকে বিল বিবরণী পাঠান"
+             >
+                <MessageCircle className="h-4 w-4" /> 
+                <span>{broadcastLoading ? `পাঠানো হচ্ছে (${broadcastProgress?.current}/${broadcastProgress?.total})...` : 'সকলকে পাঠান'}</span>
+             </button>
+             <button onClick={exportCSV} className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-2xl shadow-sm text-xs sm:text-sm font-bold transition-all active:scale-95">
                 <Download className="h-4 w-4" /> <span>Export CSV</span>
              </button>
           </div>
        </div>
 
        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 sm:space-y-6 pb-10">
+       {/* Automatic Month-End Dispatch Notice Banner */}
+       <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-3.5 sm:p-4 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+            <span className="text-emerald-900 dark:text-emerald-200 font-medium">
+              <strong className="font-extrabold text-emerald-700 dark:text-emerald-300">ফুল-অটোমেশন সক্রিয়:</strong> মাসের শেষ তারিখ সন্ধ্যা ৬:৩০ মিনিটে সকল মেম্বারের হোয়াটসঅ্যাপে সরাসরি রঙিন PDF ইনভয়েস অ্যাটাচমেন্ট সহ হিসাব স্বয়ংক্রিয়ভাবে চলে যাবে।
+            </span>
+          </div>
+          <span className="hidden md:inline-block px-2.5 py-1 bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 rounded-lg text-[10px] font-bold uppercase tracking-wider shrink-0">
+            AUTO: 18:30 BD
+          </span>
+       </div>
+
        {/* Top Stats Grid - Mobile 2-column & Desktop 5-column */}
        <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4">
            <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden">
@@ -231,19 +408,23 @@ export const Reports: React.FC = () => {
                </div>
            </div>
 
-           <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden">
-               <div className="relative z-10">
-                   <p className="text-amber-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Advance</p>
-                   <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">৳{grandTotalAdvance.toLocaleString()}</div>
-               </div>
-           </div>
+            {/* Unified Total Deposit Card */}
+            <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                    <p className="text-amber-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Total Deposit</p>
+                    <div className="text-xl sm:text-2xl font-black text-amber-600 dark:text-amber-400">৳{(grandTotalAdvance + grandTotalFinal).toLocaleString()}</div>
+                </div>
+            </div>
 
-           <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden">
-               <div className="relative z-10">
-                   <p className="text-blue-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Final Settled</p>
-                   <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400">৳{grandTotalFinal.toLocaleString()}</div>
-               </div>
-           </div>
+            {/* Dynamic Meal Rate for Selected Month Card */}
+            <div className="bg-white dark:bg-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden">
+                <div className="relative z-10">
+                    <p className="text-blue-500 text-[10px] sm:text-xs font-bold uppercase tracking-wider mb-0.5 sm:mb-1">Meal Rate</p>
+                    <div className="text-xl sm:text-2xl font-black text-blue-600 dark:text-blue-400 flex items-baseline">
+                        ৳{formatMealRate(currentMonthRate)}<span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 ml-1">/meal</span>
+                    </div>
+                </div>
+            </div>
 
            <div className="col-span-2 lg:col-span-1 bg-slate-900 text-white p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-800 shadow-sm relative overflow-hidden">
                <div className="relative z-10 flex items-center justify-between">
@@ -265,8 +446,7 @@ export const Reports: React.FC = () => {
                    <tr>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase">Name (Tap for breakdown)</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Prev. Bal</th>
-                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Advance</th>
-                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Final</th>
+                       <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Deposit</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Total Avail</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Meals</th>
                        <th className="px-4 py-4 text-xs font-bold text-slate-600 uppercase text-center">Cost</th>
@@ -301,8 +481,7 @@ export const Reports: React.FC = () => {
                                </div>
                            </td>
                            <td className={`px-4 py-3 text-center font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-500'}`}>{item.prevBalance}</td>
-                           <td className="px-4 py-3 text-center dark:text-slate-300">{item.advanceDeposit}</td>
-                           <td className="px-4 py-3 text-center dark:text-slate-300">{item.finalDeposit}</td>
+                           <td className="px-4 py-3 text-center font-bold text-emerald-600 dark:text-emerald-400">{item.advanceDeposit + item.finalDeposit}</td>
                            <td className="px-4 py-3 text-center font-bold text-blue-600 dark:text-blue-400">{item.remainingDeposit}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalMeals}</td>
                            <td className="px-4 py-3 text-center dark:text-slate-300">{item.totalCost}</td>
@@ -394,16 +573,16 @@ export const Reports: React.FC = () => {
                           <span className={`font-bold ${item.prevBalance >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}`}>{item.prevBalance} ৳</span>
                        </div>
                        <div className="text-right">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Advance</span>
-                          <span className="font-bold text-amber-600 dark:text-amber-400">{item.advanceDeposit} ৳</span>
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Deposit</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{item.advanceDeposit + item.finalDeposit} ৳</span>
                        </div>
                        <div>
-                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Final Settled</span>
-                          <span className="font-bold text-blue-600 dark:text-blue-400">{item.finalDeposit} ৳</span>
-                       </div>
-                       <div className="text-right">
                           <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Available</span>
                           <span className="font-bold text-slate-800 dark:text-slate-200">{item.remainingDeposit} ৳</span>
+                       </div>
+                       <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-slate-400 block">Meal Rate</span>
+                          <span className="font-bold text-blue-600 dark:text-blue-400">৳{formatMealRate(currentMonthRate)}/meal</span>
                        </div>
                     </div>
                  )}
@@ -415,6 +594,23 @@ export const Reports: React.FC = () => {
           })}
        </div>
        </div>
+
+       {/* In-app Toast Notification */}
+       <Toast
+         show={toast.show}
+         type={toast.type}
+         message={toast.message}
+         onClose={() => setToast(prev => ({ ...prev, show: false }))}
+       />
+
+       {/* In-app Confirmation Dialog */}
+       <ConfirmModal
+         isOpen={confirmModal.isOpen}
+         title={confirmModal.title}
+         message={confirmModal.message}
+         onConfirm={confirmModal.onConfirm}
+         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+       />
     </div>
   );
 };

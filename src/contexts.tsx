@@ -102,21 +102,37 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
         if (!currentUser) return; 
 
         const todayStr = format(new Date(), 'yyyy-MM-dd');
-        if (!allMeals.some(m => m.date === todayStr)) {
-            const activeMembers = members.filter(m => m.status === 'active');
-            if (activeMembers.length > 0) {
-                const currentEntries: Record<string, { lunch: boolean; dinner: boolean; guestLunch: number; guestDinner: number }> = {};
-                activeMembers.forEach(m => {
-                    const defaultMeals = m.defaultMeals || { lunch: true, dinner: true };
-                    currentEntries[m.id] = { lunch: defaultMeals.lunch, dinner: defaultMeals.dinner, guestLunch: 0, guestDinner: 0 };
-                });
-                
-                try {
-                    await db.collection('meals').doc(todayStr).set({ date: todayStr, entries: currentEntries }, { merge: true });
-                } catch (err) {
-                    console.error("Auto-populate error:", err);
+        
+        // If today's document is already loaded in allMeals memory, it definitely exists. Never overwrite!
+        if (allMeals.some(m => m.date === todayStr || m.id === todayStr)) {
+            setAutoPopulated(true);
+            return;
+        }
+
+        const docRef = db.collection('meals').doc(todayStr);
+        const activeMembers = members.filter(m => m.status === 'active');
+        if (activeMembers.length === 0) {
+            setAutoPopulated(true);
+            return;
+        }
+
+        const currentEntries: Record<string, { lunch: boolean; dinner: boolean; guestLunch: number; guestDinner: number }> = {};
+        activeMembers.forEach(m => {
+            const defaultLunch = m.defaultMeals?.lunch ?? true;
+            const defaultDinner = m.defaultMeals?.dinner ?? true;
+            currentEntries[m.id] = { lunch: defaultLunch, dinner: defaultDinner, guestLunch: 0, guestDinner: 0 };
+        });
+        
+        try {
+            // Atomic transaction guarantees we never overwrite if another device already created/edited it
+            await db.runTransaction(async (transaction) => {
+                const docSnap = await transaction.get(docRef);
+                if (!docSnap.exists) {
+                    transaction.set(docRef, { date: todayStr, entries: currentEntries });
                 }
-            }
+            });
+        } catch (err) {
+            console.error("Safe auto-populate error:", err);
         }
         setAutoPopulated(true);
     };

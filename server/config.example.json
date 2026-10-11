@@ -1,0 +1,4 @@
+{
+  "ngrokAuthtoken": "YOUR_NGROK_AUTHTOKEN_HERE",
+  "ngrokDomain": "YOUR_NGROK_DOMAIN_HERE"
+}

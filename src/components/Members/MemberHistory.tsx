@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { useMeals, useDeposits, useSettings } from '../../contexts';
 import { MonthPicker } from '../MonthPicker';
+import { getMealRateForMonth, calculateMealCost, formatMealRate } from '../../utils/pricing';
+import { formatWhatsAppPhone } from '../../utils/phone';
 
 interface MemberHistoryProps {
   member: Member;
@@ -24,7 +26,7 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
   const { settings, loading: settingsLoading } = useSettings();
   const dataLoading = settingsLoading || mealsLoading || depositsLoading;
 
-  const currentPrice = settings?.mealPrice || 65;
+  const currentPrice = getMealRateForMonth(settings, selectedMonth);
 
   // Month navigation helpers
   const handlePrevMonth = () => {
@@ -50,7 +52,7 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
 
     // 1. Previous Balance (before this month)
     let prevDeposits = 0;
-    let prevMeals = 0;
+    let prevMealCost = 0;
     allDeposits.forEach(d => {
       if (d.memberId === member.id && d.date < startStr) {
         prevDeposits += d.amount;
@@ -60,14 +62,13 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
       if (mDoc.date < startStr) {
         const entry = mDoc.entries?.[member.id];
         if (entry) {
-          if (entry.lunch) prevMeals++;
-          if (entry.dinner) prevMeals++;
-          prevMeals += Number(entry.guestLunch) || 0;
-          prevMeals += Number(entry.guestDinner) || 0;
+          const meals = (entry.lunch ? 1 : 0) + (entry.dinner ? 1 : 0) + (Number(entry.guestLunch) || 0) + (Number(entry.guestDinner) || 0);
+          const pastRate = getMealRateForMonth(settings, mDoc.date.slice(0, 7));
+          prevMealCost += calculateMealCost(meals, pastRate);
         }
       }
     });
-    const prevBalance = prevDeposits - (prevMeals * currentPrice);
+    const prevBalance = Math.round(prevDeposits - prevMealCost);
 
     // 2. Current Month Deposits
     let monthAdvance = 0;
@@ -119,11 +120,11 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
         guestDinner,
         guestTotal,
         dailyTotal,
-        cost: dailyTotal * currentPrice
+        cost: calculateMealCost(dailyTotal, currentPrice)
       };
     });
 
-    const monthTotalCost = monthMealsCount * currentPrice;
+    const monthTotalCost = calculateMealCost(monthMealsCount, currentPrice);
     const availableFunds = prevBalance + totalMonthDeposit;
     const monthClosingBalance = availableFunds - monthTotalCost;
 
@@ -211,7 +212,7 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
                       <Phone className="h-3 w-3" />
                     </a>
                     <a 
-                      href={`https://wa.me/${member.phone.startsWith('0') ? '88' + member.phone : member.phone}`} 
+                      href={`https://wa.me/${formatWhatsAppPhone(member.phone)}`} 
                       target="_blank" 
                       rel="noreferrer"
                       className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition-colors"
@@ -240,7 +241,7 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
           <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
           <div className="text-right">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Rate / Meal</span>
-            <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{currentPrice} BDT</span>
+            <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100">{formatMealRate(currentPrice)} BDT</span>
           </div>
         </div>
 
@@ -273,7 +274,7 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
                 ৳{(historyData?.monthTotalCost || 0).toLocaleString()}
               </div>
               <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">
-                {(historyData?.monthMealsCount || 0)} × {currentPrice} BDT
+                {(historyData?.monthMealsCount || 0)} × {formatMealRate(currentPrice)} BDT
               </div>
             </div>
 
@@ -287,7 +288,7 @@ export const MemberHistory: React.FC<MemberHistoryProps> = ({ member, initialMon
                 ৳{(historyData?.totalMonthDeposit || 0).toLocaleString()}
               </div>
               <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                Adv: {historyData?.monthAdvance || 0} | Final: {historyData?.monthFinal || 0}
+                Total Month Deposit
               </div>
             </div>
 

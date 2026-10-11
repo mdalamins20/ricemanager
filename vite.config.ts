@@ -10,16 +10,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg'],
+      includeAssets: ['logo.png', 'developer.png'],
       devOptions: {
-        enabled: true,
-        type: 'module',
+        enabled: false,
       },
       manifest: {
-        name: 'Rice Manager',
-        short_name: 'RiceMgr',
+        name: 'Meal Manager',
+        short_name: 'MealMgr',
         description: 'Rice Meal Management System',
-        theme_color: '#dc2626',
+        theme_color: '#10b981',
         background_color: '#f8fafc',
         display: 'standalone',
         scope: '/',
@@ -27,26 +26,50 @@ export default defineConfig({
         orientation: 'portrait',
         icons: [
           {
-            src: 'icon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable'
-          },
-          {
-            src: 'icon.svg',
+            src: 'logo.png',
             sizes: '192x192',
-            type: 'image/svg+xml'
+            type: 'image/png'
           },
           {
-            src: 'icon.svg',
+            src: 'logo.png',
             sizes: '512x512',
-            type: 'image/svg+xml'
+            type: 'image/png'
+          },
+          {
+            src: 'logo.png',
+            sizes: 'any',
+            type: 'image/png',
+            purpose: 'any maskable'
           }
         ]
       }
     })
   ],
+  server: {
+    watch: {
+      ignored: [
+        '**/server/**',
+        '**/auth_info_baileys/**',
+        '**/*.vbs',
+        '**/*.bat',
+        '**/*.log'
+      ]
+    }
+  },
   build: {
     outDir: 'dist',
+    chunkSizeWarningLimit: 1200,
+    cssCodeSplit: true,
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-firebase': ['firebase/compat/app', 'firebase/compat/auth', 'firebase/compat/firestore'],
+          'vendor-pdf': ['jspdf', 'jspdf-autotable'],
+          'vendor-ui': ['lucide-react', 'date-fns']
+        }
+      }
+    }
   }
 })

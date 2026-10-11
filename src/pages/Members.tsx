@@ -13,6 +13,8 @@ import { logAction } from '../utils/logger';
 import { useMembers, useMeals, useDeposits, useSettings } from '../contexts';
 
 import { MemberHistory } from '../components/Members/MemberHistory';
+import { getMealRateForMonth, calculateMealCost } from '../utils/pricing';
+import { formatWhatsAppPhone } from '../utils/phone';
 
 // --- Main Members Component ---
 export const Members: React.FC = () => {
@@ -91,27 +93,40 @@ export const Members: React.FC = () => {
 
     const inputPhone = formData.phone?.trim();
     if (!inputPhone) {
-        setFormError("মোবাইল নম্বর দেওয়া আবশ্যক!");
+        setFormError("Phone number is required!");
         return;
     }
     const duplicateMember = members.find(m => m.phone === inputPhone && m.id !== selectedMemberId);
     if (duplicateMember) {
-        setFormError(`এই মোবাইল নম্বরটি (${inputPhone}) ইতিমধ্যে "${duplicateMember.fullName}" ব্যবহার করছেন।`);
+        setFormError(`This phone number (${inputPhone}) is already used by "${duplicateMember.fullName}".`);
         return;
     }
 
     try {
+      const sanitizedData: Partial<Member> = {
+        fullName: formData.fullName?.trim() || '',
+        phone: inputPhone,
+        address: formData.address?.trim() || '',
+        status: formData.status || 'active',
+        photoBase64: formData.photoBase64 || ''
+      };
+
       if (selectedMemberId) {
-        await db.collection('members').doc(selectedMemberId).update(formData);
-        await logAction('Update Member', `Updated details for ${formData.fullName}`);
+        await db.collection('members').doc(selectedMemberId).update(sanitizedData);
+        logAction('Update Member', `Updated details for ${sanitizedData.fullName}`).catch(console.error);
       } else {
-        await db.collection('members').add({ ...formData, joinDate: format(new Date(), 'yyyy-MM-dd'), status: 'active' });
-        await logAction('Add Member', `Added new member: ${formData.fullName}`);
+        await db.collection('members').add({ 
+          ...sanitizedData, 
+          joinDate: format(new Date(), 'yyyy-MM-dd'), 
+          status: 'active',
+          defaultMeals: { lunch: true, dinner: true }
+        });
+        logAction('Add Member', `Added new member: ${sanitizedData.fullName}`).catch(console.error);
       }
       closeModal();
     } catch (error) { 
         console.error(error); 
-        setFormError("সংরক্ষণ করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।");
+        setFormError("Failed to save member. Please try again.");
     }
   };
 
@@ -126,29 +141,31 @@ export const Members: React.FC = () => {
     const member = deleteModal.member;
 
     try {
-      const currentPrice = settings?.mealPrice || 65;
       const memberDeposits = allDeposits.filter(d => d.memberId === member.id);
       let totalDeposit = memberDeposits.reduce((sum, d) => sum + d.amount, 0);
 
       let totalMeals = 0;
+      let totalCost = 0;
       allMeals.forEach(mDoc => {
         const entry = mDoc.entries?.[member.id];
         if (entry) {
-          if (entry.lunch) totalMeals++;
-          if (entry.dinner) totalMeals++;
-          totalMeals += Number(entry.guestLunch) || 0;
-          totalMeals += Number(entry.guestDinner) || 0;
+          let docMeals = 0;
+          if (entry.lunch) docMeals++;
+          if (entry.dinner) docMeals++;
+          docMeals += Number(entry.guestLunch) || 0;
+          docMeals += Number(entry.guestDinner) || 0;
+          totalMeals += docMeals;
+          const docRate = getMealRateForMonth(settings, mDoc.date.slice(0, 7));
+          totalCost += calculateMealCost(docMeals, docRate);
         }
       });
-
-      const totalCost = totalMeals * currentPrice;
       const netBalance = Number.isNaN(totalDeposit - totalCost) ? 0 : totalDeposit - totalCost;
 
       if (Number.isNaN(netBalance) || netBalance < 0) {
         setDeleteModal(prev => ({ 
             ...prev, 
             loading: false, 
-            error: `এই মেম্বারকে ডিলিট করা সম্ভব নয়।\n\n${member.fullName}-এর ${Math.abs(netBalance)} টাকা বকেয়া (Due) আছে।\n\nডিলিট করার আগে অবশ্যই সম্পূর্ণ বিল পরিশোধ করতে হবে।` 
+            error: `Cannot delete this member.\n\n${member.fullName} has an outstanding balance of ${Math.abs(netBalance)} TK (Due).\n\nPlease settle all dues before deleting.` 
         }));
         return;
       }
@@ -324,7 +341,7 @@ export const Members: React.FC = () => {
                               <Phone className="h-3 w-3" />
                             </a>
                             <a 
-                              href={`https://wa.me/${member.phone.startsWith('0') ? '88' + member.phone : member.phone}`} 
+                              href={`https://wa.me/${formatWhatsAppPhone(member.phone)}`} 
                               target="_blank" 
                               rel="noreferrer"
                               onClick={e => e.stopPropagation()} 

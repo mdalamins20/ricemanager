@@ -30,10 +30,22 @@ export interface DailyMealDoc {
   notes?: DailyNote[];
 }
 
+export interface MonthRateConfig {
+  pricingMode: 'per_meal' | 'monthly_package';
+  mealPrice: number; // Effective rate per meal (e.g. 65 or 68.33333333)
+  packageAmount?: number; // Total monthly package (e.g. 4100)
+  packageDays?: number; // Days in month (e.g. 30)
+  packageMeals?: number; // Total standard meals (e.g. 60)
+}
+
 export interface AppSettings {
-  mealPrice: number;
+  mealPrice: number; // Default fallback meal price
   messName?: string;
   youtubeVideoUrl?: string;
+  vendorName?: string;
+  vendorPhone?: string;
+  whatsappServerUrl?: string; // Optional Cloudflare Tunnel or external WhatsApp server URL
+  monthRates?: Record<string, MonthRateConfig>; // Keyed by 'yyyy-MM', e.g. '2026-10'
 }
 
 export interface MonthlySummary {

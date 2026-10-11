@@ -2,17 +2,45 @@ import React, { useState, useMemo } from 'react';
 import { db } from '../firebase';
 import firebase from 'firebase/compat/app';
 import { format } from 'date-fns';
-import { ChefHat, Plus, Trash2, Calendar, Banknote, WalletCards, X } from 'lucide-react';
-import { useDeposits, useVendorPayments } from '../contexts';
+import { ChefHat, Plus, Trash2, Calendar, Banknote, WalletCards, X, Send, Phone, Edit3, CheckCircle, AlertCircle, Utensils } from 'lucide-react';
+import { useDeposits, useVendorPayments, useMeals, useSettings } from '../contexts';
 import { MonthPicker } from '../components/MonthPicker';
+import { logAction } from '../utils/logger';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { Toast } from '../components/Toast';
+import { getMealRateForMonth, formatMealRate } from '../utils/pricing';
+import { formatWhatsAppPhone } from '../utils/phone';
+import { getWhatsAppApiUrl, getApiHeaders } from '../utils/apiConfig';
 
 export const Accounting: React.FC = () => {
   const { allDeposits, loading: depositsLoading } = useDeposits();
   const { vendorPayments, loading: vendorPaymentsLoading } = useVendorPayments();
+  const { allMeals, loading: mealsLoading } = useMeals();
+  const { settings, loading: settingsLoading } = useSettings();
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
   const [user, setUser] = useState<firebase.User | null>(null);
-  const [errorToast, setErrorToast] = useState<string | null>(null);
-  
+
+  const [toast, setToast] = useState<{ show: boolean; type: 'success' | 'error' | 'warning' | 'info'; message: string }>({
+    show: false,
+    type: 'success',
+    message: ''
+  });
+
+  const showToast = (type: 'success' | 'error' | 'warning' | 'info', message: string) => {
+    setToast({ show: true, type, message });
+  };
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; id: string; payAmount: number }>({
+    isOpen: false,
+    id: '',
+    payAmount: 0
+  });
+
+  const [sendStatementConfirm, setSendStatementConfirm] = useState(false);
+  const [statementSending, setStatementSending] = useState(false);
+
   // Form State
   const [amount, setAmount] = useState('');
   const [transactionDate, setTransactionDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -22,30 +50,68 @@ export const Accounting: React.FC = () => {
 
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
 
+  // Vendor Info State (from settings)
+  const [vendorNameInput, setVendorNameInput] = useState(settings?.vendorName || '');
+  const [vendorPhoneInput, setVendorPhoneInput] = useState(settings?.vendorPhone || '');
+  const [savingVendor, setSavingVendor] = useState(false);
+
+  React.useEffect(() => {
+    if (settings) {
+      setVendorNameInput(settings.vendorName || '');
+      setVendorPhoneInput(settings.vendorPhone || '');
+    }
+  }, [settings]);
+
   React.useEffect(() => {
     const authUnsub = firebase.auth().onAuthStateChanged((currentUser) => setUser(currentUser));
     return () => authUnsub();
   }, []);
 
-  const loading = depositsLoading || vendorPaymentsLoading;
+  const loading = depositsLoading || vendorPaymentsLoading || mealsLoading || settingsLoading;
 
-  // Analytics
+  // Analytics for Member Deposits & Vendor Payments
   const { totalCollections, totalPaid, cashInHand } = useMemo(() => {
-    // Filter deposits by selected month
     const monthDeposits = allDeposits.filter(d => d.date.startsWith(selectedMonth));
     const totalCollections = monthDeposits.reduce((acc, curr) => acc + curr.amount, 0);
-    
-    // Filter vendor payments by selected month (using forMonth if available, otherwise fallback to date prefix)
+
     const monthPayments = vendorPayments.filter(vp => {
         const vpMonth = vp.forMonth || vp.date.substring(0, 7);
         return vpMonth === selectedMonth;
     });
     const totalPaid = monthPayments.reduce((acc, curr) => acc + curr.amount, 0);
-    
-    // Cash in hand for the selected month
     const cashInHand = totalCollections - totalPaid;
     return { totalCollections, totalPaid, cashInHand };
   }, [allDeposits, vendorPayments, selectedMonth]);
+
+  // Vendor Meal & Bill Analytics for Selected Month
+  const vendorBilling = useMemo(() => {
+    let totalMeals = 0;
+    allMeals.forEach(mDoc => {
+      if (mDoc.date.startsWith(selectedMonth) && mDoc.entries) {
+        Object.values(mDoc.entries).forEach(entry => {
+          if (entry.lunch) totalMeals++;
+          if (entry.dinner) totalMeals++;
+          totalMeals += Number(entry.guestLunch) || 0;
+          totalMeals += Number(entry.guestDinner) || 0;
+        });
+      }
+    });
+
+    const mealRate = getMealRateForMonth(settings, selectedMonth);
+    const totalFoodCost = Math.round(totalMeals * mealRate);
+    const remainingDue = totalFoodCost - totalPaid;
+
+    const [y, m] = selectedMonth.split('-');
+    const monthName = format(new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1), 'MMMM yyyy');
+
+    return {
+      totalMeals,
+      mealRate,
+      totalFoodCost,
+      remainingDue,
+      monthName
+    };
+  }, [allMeals, selectedMonth, settings, totalPaid]);
 
   const sortedPayments = useMemo(() => {
     const filtered = vendorPayments.filter(vp => {
@@ -66,60 +132,156 @@ export const Accounting: React.FC = () => {
     });
   }, [vendorPayments, selectedMonth]);
 
+  // Save Vendor Contact Info
+  const handleSaveVendorInfo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSavingVendor(true);
+    try {
+      await db.collection('settings').doc('config').set({
+        vendorName: vendorNameInput.trim(),
+        vendorPhone: vendorPhoneInput.trim()
+      }, { merge: true });
+
+      setIsVendorModalOpen(false);
+      showToast('success', 'ভেন্ডর তথ্য সফলভাবে সংরক্ষিত হয়েছে!');
+      logAction('Update Vendor Info', `Updated vendor: ${vendorNameInput} (${vendorPhoneInput})`).catch(console.error);
+    } catch (err: any) {
+      console.error(err);
+      showToast('error', 'ভেন্ডর তথ্য সেভ করতে সমস্যা হয়েছে।');
+    } finally {
+      setSavingVendor(false);
+    }
+  };
+
+  // Add Vendor Payment with Instant WhatsApp Receipt
   const handleAddPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) {
-        setErrorToast("You must be logged in to add a payment.");
+        showToast('error', 'পেমেন্ট যুক্ত করতে অনুগ্রহ করে লগইন করুন।');
         return;
     }
-    if (!amount || isNaN(Number(amount))) return;
+    const payNum = Number(amount);
+    if (!payNum || isNaN(payNum) || payNum <= 0) return;
     
     setSubmitting(true);
     try {
       await db.collection('vendor_payments').add({
-        amount: Number(amount),
+        amount: payNum,
         date: transactionDate,
         forMonth: paymentForMonth,
         note,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       
-      // Also log activity
-      await db.collection('activity_logs').add({
-        action: 'VENDOR_PAYMENT_ADDED',
-        details: `Paid ৳${amount} to vendor on ${transactionDate} for ${format(new Date(`${paymentForMonth}-01`), 'MMMM yyyy')}`,
-        performedBy: firebase.auth().currentUser?.email || 'System',
-        timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      const [y, m] = paymentForMonth.split('-');
+      const formattedMonthName = format(new Date(parseInt(y), parseInt(m) - 1, 1), 'MMMM yyyy');
+      logAction('Add Vendor Payment', `Paid ৳${payNum} to vendor on ${transactionDate} for ${formattedMonthName}`).catch(console.error);
 
+      // Close modal and reset fields immediately
       setIsAddModalOpen(false);
       setAmount('');
       setNote('');
       setTransactionDate(format(new Date(), 'yyyy-MM-dd'));
       setPaymentForMonth(selectedMonth);
+
+      showToast('success', `✅ ভেন্ডর পেমেন্ট ৳${payNum} সফলভাবে সংরক্ষিত হয়েছে!`);
+
+      // WhatsApp automated payment receipt
+      const vPhone = formatWhatsAppPhone(settings?.vendorPhone);
+      if (vPhone) {
+        const newTotalPaid = totalPaid + payNum;
+        const newRemainingDue = vendorBilling.totalFoodCost - newTotalPaid;
+        const apiBase = getWhatsAppApiUrl(settings);
+
+        fetch(`${apiBase}/api/vendor-payment-receipt`, {
+          method: 'POST',
+          headers: getApiHeaders(),
+          body: JSON.stringify({
+            vendorName: settings?.vendorName || 'খালা / বাবুর্চি',
+            phone: vPhone,
+            paymentDate: transactionDate,
+            amount: payNum,
+            paymentForMonth: formattedMonthName,
+            totalPaidThisMonth: newTotalPaid,
+            remainingDueThisMonth: newRemainingDue,
+            note: note || ''
+          })
+        }).then(r => r.json()).then(res => {
+          if (res?.success) {
+            showToast('info', `📲 ভেন্ডরের হোয়াটসঅ্যাপে (${vPhone}) পেমেন্ট রসিদ পাঠানো হয়েছে!`);
+          }
+        }).catch(err => {
+          console.log('[Vendor Bot] Offline or error:', err);
+        });
+      }
     } catch (error) {
       console.error("Error adding vendor payment: ", error);
-      setErrorToast("Failed to add payment. You may not have permission.");
+      showToast('error', 'পেমেন্ট সংরক্ষণ করতে সমস্যা হয়েছে।');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id: string, payAmount: number) => {
-    if (window.confirm("Are you sure you want to delete this payment record?")) {
-      try {
-        await db.collection('vendor_payments').doc(id).delete();
-        
-        await db.collection('activity_logs').add({
-          action: 'VENDOR_PAYMENT_DELETED',
-          details: `Deleted vendor payment of ৳${payAmount}`,
-          performedBy: firebase.auth().currentUser?.email || 'System',
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      } catch (error) {
-        console.error("Error deleting payment: ", error);
-        setErrorToast("Failed to delete payment. You may not have permission.");
+  // Send Month-End Vendor Statement via WhatsApp
+  const handleSendVendorStatement = async () => {
+    setSendStatementConfirm(false);
+    const vPhone = formatWhatsAppPhone(settings?.vendorPhone);
+    if (!vPhone) {
+      showToast('warning', 'ভেন্ডরের কোনো হোয়াটসঅ্যাপ নম্বর পাওয়া যায়নি! অনুগ্রহ করে নম্বর যুক্ত করুন।');
+      setIsVendorModalOpen(true);
+      return;
+    }
+
+    setStatementSending(true);
+    const apiBase = getWhatsAppApiUrl(settings);
+    try {
+      const res = await fetch(`${apiBase}/api/vendor-monthly-statement`, {
+        method: 'POST',
+        headers: getApiHeaders(),
+        body: JSON.stringify({
+          vendorName: settings?.vendorName || 'খালা / বাবুর্চি',
+          phone: vPhone,
+          monthName: vendorBilling.monthName,
+          totalMeals: vendorBilling.totalMeals,
+          mealRate: formatMealRate(vendorBilling.mealRate),
+          totalCost: vendorBilling.totalFoodCost,
+          totalPaid: totalPaid,
+          dueAmount: vendorBilling.remainingDue
+        })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        showToast('success', `✅ ভেন্ডরের হোয়াটসঅ্যাপে (${vPhone}) ${vendorBilling.monthName} মাসের চূড়ান্ত হিসাব সফলভাবে পাঠানো হয়েছে!`);
+      } else {
+        showToast('error', `পাঠানো যায়নি: ${data?.error || 'সার্ভার সমস্যা'}`);
       }
+    } catch (err: any) {
+      console.error(err);
+      showToast('error', 'হোয়াটসঅ্যাপ সার্ভারের সাথে সংযোগ করা যায়নি। সার্ভার চালু আছে কিনা দেখুন।');
+    } finally {
+      setStatementSending(false);
+    }
+  };
+
+  const handleDelete = (id: string, payAmount: number) => {
+    setDeleteConfirm({
+      isOpen: true,
+      id,
+      payAmount
+    });
+  };
+
+  const confirmDeletePayment = async () => {
+    const { id, payAmount } = deleteConfirm;
+    setDeleteConfirm({ isOpen: false, id: '', payAmount: 0 });
+    try {
+      await db.collection('vendor_payments').doc(id).delete();
+      logAction('Delete Vendor Payment', `Deleted vendor payment of ৳${payAmount}`).catch(console.error);
+      showToast('success', 'পেমেন্ট রেকর্ড মুছে ফেলা হয়েছে।');
+    } catch (error) {
+      console.error("Error deleting payment: ", error);
+      showToast('error', 'পেমেন্ট রেকর্ড মুছতে সমস্যা হয়েছে।');
     }
   };
 
@@ -214,6 +376,94 @@ export const Accounting: React.FC = () => {
           </div>
       </div>
 
+      {/* Vendor Overview & Automated WhatsApp Hub */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white rounded-3xl p-5 sm:p-6 shadow-xl border border-slate-700/60 relative overflow-hidden">
+        <div className="absolute top-0 right-0 -mt-6 -mr-6 h-36 w-36 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none"></div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-700/60">
+          <div className="flex items-center gap-3.5">
+            <div className="h-12 w-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner">
+              <ChefHat className="h-6 w-6 stroke-[2.2px]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                  {settings?.vendorName || 'খালা / বাবুর্চি'}
+                </h3>
+                {user && (
+                  <button 
+                    type="button"
+                    onClick={() => setIsVendorModalOpen(true)}
+                    className="p-1 hover:bg-white/10 rounded-lg text-slate-400 hover:text-emerald-400 transition-colors"
+                    title="ভেন্ডর তথ্য এডিট করুন"
+                  >
+                    <Edit3 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5 font-medium">
+                <Phone className="h-3 w-3 text-emerald-400" />
+                {settings?.vendorPhone ? `হোয়াটসঅ্যাপ: +${formatWhatsAppPhone(settings.vendorPhone)}` : <span className="text-amber-400">হোয়াটসঅ্যাপ নম্বর যোগ করা নেই</span>}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {user && (
+              <button
+                type="button"
+                onClick={() => setIsVendorModalOpen(true)}
+                className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-300 hover:text-white transition-all flex items-center gap-1.5 active:scale-95"
+              >
+                <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                <span>{settings?.vendorPhone ? 'নম্বর পরিবর্তন' : 'নম্বর যুক্ত করুন'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              disabled={statementSending}
+              onClick={() => setSendStatementConfirm(true)}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-lg shadow-emerald-900/40 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50"
+            >
+              <Send className="h-3.5 w-3.5" />
+              <span>{statementSending ? 'পাঠানো হচ্ছে...' : 'ভেন্ডরকে মাসিক হিসাব পাঠান'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Real-time Month Breakdown for Vendor */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-4 text-xs">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">মোট মিল ({vendorBilling.monthName})</span>
+            <span className="text-base sm:text-lg font-black text-white">{vendorBilling.totalMeals} টি</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">রেট: ৳{formatMealRate(vendorBilling.mealRate)}</span>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">মোট মিল বিল</span>
+            <span className="text-base sm:text-lg font-black text-emerald-400">৳{vendorBilling.totalFoodCost.toLocaleString()}</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">খাদ্য বাবদ প্রদেয়</span>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-3">
+            <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider block mb-1">পরিশোধ করা হয়েছে</span>
+            <span className="text-base sm:text-lg font-black text-amber-400">৳{totalPaid.toLocaleString()}</span>
+            <span className="text-[10px] text-slate-400 block mt-0.5">{sortedPayments.length} টি কিস্তিতে</span>
+          </div>
+
+          <div className={`border rounded-2xl p-3 ${vendorBilling.remainingDue > 0 ? 'bg-rose-500/10 border-rose-500/20 text-rose-400' : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}`}>
+            <span className="text-[10px] uppercase font-bold tracking-wider block mb-1">
+              {vendorBilling.remainingDue > 0 ? 'অবশিষ্ট বকেয়া' : 'অগ্রিম / পরিশোধিত'}
+            </span>
+            <span className="text-base sm:text-lg font-black">
+              {vendorBilling.remainingDue > 0 ? `৳${vendorBilling.remainingDue.toLocaleString()}` : `৳${Math.abs(vendorBilling.remainingDue).toLocaleString()} (পরিশোধিত)`}
+            </span>
+            <span className="text-[10px] opacity-80 block mt-0.5">চলতি স্থিতি</span>
+          </div>
+        </div>
+      </div>
+
       {/* Transactions List */}
       <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-sm border border-slate-200/50 dark:border-slate-700/50 overflow-hidden">
           <div className="p-5 border-b border-slate-100 dark:border-slate-700/50 bg-slate-50/50 dark:bg-slate-800/50 flex items-center gap-3">
@@ -304,6 +554,7 @@ export const Accounting: React.FC = () => {
                  <ChefHat className="h-5 w-5 text-emerald-600" /> Record Vendor Payment
               </h3>
               <button 
+                type="button"
                 onClick={() => setIsAddModalOpen(false)}
                 className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
               >
@@ -402,15 +653,94 @@ export const Accounting: React.FC = () => {
         </div>
       )}
 
-      {/* Error Toast */}
-      {errorToast && (
-        <div className="fixed bottom-4 right-4 z-[110] bg-red-600 text-white px-6 py-3 rounded-2xl shadow-xl shadow-red-600/20 flex items-center gap-3 animate-in slide-in-from-bottom-5">
-            <span className="font-bold">{errorToast}</span>
-            <button onClick={() => setErrorToast(null)} className="p-1 hover:bg-white/20 rounded-full transition-colors">
-                <X className="h-4 w-4" />
-            </button>
+      {/* Edit Vendor Contact Modal */}
+      {isVendorModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setIsVendorModalOpen(false)} />
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-md relative z-10 p-6 animate-in zoom-in-95 border border-slate-100 dark:border-slate-800">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <ChefHat className="h-5 w-5 text-emerald-600" /> ভেন্ডর / বাবুর্চি তথ্য
+              </h3>
+              <button 
+                type="button" 
+                onClick={() => setIsVendorModalOpen(false)} 
+                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-400"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVendorInfo} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">ভেন্ডর / বাবুর্চির নাম</label>
+                <input 
+                  type="text" 
+                  value={vendorNameInput} 
+                  onChange={e => setVendorNameInput(e.target.value)} 
+                  placeholder="যেমন: খালা / বাবুর্চি / বুয়া" 
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider block mb-1">হোয়াটসঅ্যাপ মোবাইল নম্বর</label>
+                <input 
+                  type="text" 
+                  required
+                  value={vendorPhoneInput} 
+                  onChange={e => setVendorPhoneInput(e.target.value)} 
+                  placeholder="যেমন: 017xxxxxxxx বা 88017xxxxxxxx" 
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm dark:text-white"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">পেমেন্ট করার সাথে সাথে এই নম্বরে স্বয়ংক্রিয় রসিদ যাবে।</p>
+              </div>
+
+              <div className="pt-2">
+                <button 
+                  type="submit" 
+                  disabled={savingVendor}
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {savingVendor ? 'সংরক্ষণ হচ্ছে...' : 'সংরক্ষণ করুন'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
+
+      {/* Month-End Statement Confirmation Dialog */}
+      <ConfirmModal
+        isOpen={sendStatementConfirm}
+        title="ভেন্ডরকে মাসিক হিসাব পাঠাবেন?"
+        message={`${settings?.vendorName || 'ভেন্ডর'}-কে ${vendorBilling.monthName} মাসের মোট মিল (${vendorBilling.totalMeals} টি), মোট খাদ্য বিল (৳${vendorBilling.totalFoodCost.toLocaleString()}), মোট পরিশোধ (৳${totalPaid.toLocaleString()}) এবং বর্তমান স্থিতির পূর্ণাঙ্গ হোয়াটসঅ্যাপ বার্তা পাঠাতে চান?`}
+        confirmText="হ্যাঁ, পাঠান"
+        cancelText="বাতিল"
+        variant="emerald"
+        onConfirm={handleSendVendorStatement}
+        onCancel={() => setSendStatementConfirm(false)}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmModal
+        isOpen={deleteConfirm.isOpen}
+        title="পেমেন্ট রেকর্ড মুছে ফেলবেন?"
+        message={`ভেন্ডরকে প্রদত্ত ৳${deleteConfirm.payAmount} টাকার এই পেমেন্ট রেকর্ডটি স্থায়ীভাবে মুছে ফেলতে চান?`}
+        confirmText="মুছে ফেলুন"
+        cancelText="বাতিল"
+        variant="rose"
+        onConfirm={confirmDeletePayment}
+        onCancel={() => setDeleteConfirm(prev => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* In-app Toast Notification */}
+      <Toast
+        show={toast.show}
+        type={toast.type}
+        message={toast.message}
+        onClose={() => setToast(prev => ({ ...prev, show: false }))}
+      />
     </div>
   );
 };

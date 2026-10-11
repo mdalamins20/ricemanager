@@ -4,6 +4,7 @@ import { MonthPicker } from '../components/MonthPicker';
 import { UsersRound, UtensilsCrossed, Banknote, TrendingUp, TrendingDown, Receipt, ChefHat, Calendar, Sun, Moon, Clock, ArrowRightLeft, Sunrise, Sunset, Coffee, Wallet } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { useMembers, useMeals, useDeposits, useSettings, useVendorPayments } from '../contexts';
+import { getMealRateForMonth, calculateMealCost, formatMealRate } from '../utils/pricing';
 
 export const Dashboard: React.FC = () => {
   const { members } = useMembers();
@@ -27,7 +28,7 @@ export const Dashboard: React.FC = () => {
 
   const stats = useMemo(() => {
     const activeMembers = members.filter(m => m.status === 'active').length;
-    const mealPrice = settings?.mealPrice || 65;
+    const mealPrice = getMealRateForMonth(settings, selectedMonth);
     
     // Monthly calculations
     let monthMealsCount = 0;
@@ -69,7 +70,7 @@ export const Dashboard: React.FC = () => {
         })
         .reduce((sum, vp) => sum + vp.amount, 0);
 
-    const monthBillAmount = monthMealsCount * mealPrice;
+    const monthBillAmount = calculateMealCost(monthMealsCount, mealPrice);
     const netBalance = monthDepositAmount - monthBillAmount;
     const cashInHand = monthDepositAmount - monthVendorPaid;
 
@@ -81,6 +82,7 @@ export const Dashboard: React.FC = () => {
       monthVendorPaid,
       netBalance,
       cashInHand,
+      mealPrice,
       todayLunch,
       todayDinner,
       todayGuest
@@ -135,7 +137,7 @@ export const Dashboard: React.FC = () => {
         <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto mt-1 md:mt-0">
            <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 bg-white/60 dark:bg-slate-800/60 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm shrink-0">
                <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">Meal Rate</span>
-               <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">৳{settings?.mealPrice || 65}</span>
+               <span className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-400">৳{formatMealRate(stats.mealPrice)}</span>
            </div>
            <MonthPicker value={selectedMonth} onChange={setSelectedMonth} className="flex-1 md:flex-auto" />
         </div>

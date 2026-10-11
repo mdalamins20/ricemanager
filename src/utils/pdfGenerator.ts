@@ -25,7 +25,7 @@ export interface MemberReport {
   photoBase64?: string;
 }
 
-export const generatePDF = async (item: MemberReport, selectedMonth: string): Promise<jsPDF> => {
+export const generatePDF = async (item: MemberReport, selectedMonth: string, monthlyRate?: number): Promise<jsPDF> => {
   const doc = new jsPDF({
     orientation: 'p',
     unit: 'mm',
@@ -53,7 +53,8 @@ export const generatePDF = async (item: MemberReport, selectedMonth: string): Pr
     if (l.dinner) dinnerCount++;
     guestCount += (Number(l.guestLunch) || 0) + (Number(l.guestDinner) || 0);
   });
-  const ratePerMeal = item.totalMeals > 0 ? Math.round(item.totalCost / item.totalMeals) : 65;
+  const fallbackRate = monthlyRate || 65;
+  const ratePerMeal = item.totalMeals > 0 ? (Math.round((item.totalCost / item.totalMeals) * 100) / 100) : fallbackRate;
 
   // 1. Load Logo
   let logoDataUrl = '';
@@ -280,8 +281,7 @@ export const generatePDF = async (item: MemberReport, selectedMonth: string): Pr
     head: [['Description', 'Amount (BDT)']],
     body: [
       ['Previous Balance (Brought Forward)', `${item.prevBalance >= 0 ? '+' : ''}${item.prevBalance}`],
-      ['Advance Deposit (Current Month)', `+${item.advanceDeposit}`],
-      ['Final Settlement / Extra Payment', `+${item.finalDeposit}`],
+      ['Total Deposit (Current Month)', `+${item.advanceDeposit + item.finalDeposit}`],
       ['Total Available Funds', `${item.remainingDeposit}`],
       [
         guestCount > 0 
@@ -308,11 +308,11 @@ export const generatePDF = async (item: MemberReport, selectedMonth: string): Pr
     },
     didParseCell: (data) => {
       if (data.section === 'body') {
-        if (data.row.index === 2) {
-          data.cell.styles.textColor = [16, 185, 129]; // Final settlement green
+        if (data.row.index === 1) {
+          data.cell.styles.textColor = [16, 185, 129]; // Deposit green
+        } else if (data.row.index === 2) {
+          data.cell.styles.fontStyle = 'bold'; // Available bold
         } else if (data.row.index === 3) {
-          data.cell.styles.fontStyle = 'bold';
-        } else if (data.row.index === 4) {
           data.cell.styles.textColor = [225, 29, 72]; // Meals red
         }
       }

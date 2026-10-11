@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { db, auth } from '../firebase';
 import firebase from 'firebase/compat/app';
 import { format, subDays, addDays } from 'date-fns';
@@ -8,6 +8,7 @@ import { CalendarDays, Save, MoonStar, SunMedium, Lock, CheckCircle2, AlertTrian
 import { Member, DailyMealDoc, AppSettings } from '../types';
 import { logAction } from '../utils/logger';
 import { useMembers, useMeals, useSettings } from '../contexts';
+import { getMealRateForMonth, calculateMealCost } from '../utils/pricing';
 
 export const MealEntry: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -17,7 +18,6 @@ export const MealEntry: React.FC = () => {
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [price, setPrice] = useState(65);
   const [user, setUser] = useState<firebase.User | null>(null);
 
   // Toast State with cleanup ref
@@ -49,114 +49,127 @@ export const MealEntry: React.FC = () => {
   const { allMeals, loading: mealsLoading } = useMeals();
   const { settings, loading: settingsLoading } = useSettings();
   const dataLoading = membersLoading || mealsLoading || settingsLoading;
-  const [activeMembers, setActiveMembers] = useState<Member[]>([]);
+  const activeMembers = useMemo(() => allMembers.filter(m => m.status === 'active'), [allMembers]);
 
+  const price = useMemo(() => getMealRateForMonth(settings, selectedDate.slice(0, 7)), [settings, selectedDate]);
+
+  // Real-time direct snapshot listener for the selected date document.
+  // This provides instant sub-second sync between Mobile and Desktop and avoids full-collection race conditions.
   useEffect(() => {
-    setActiveMembers(allMembers.filter(m => m.status === 'active'));
-  }, [allMembers]);
-
-  const fetchData = useCallback(async () => {
     if (dataLoading) return;
     setLoading(true);
-    
-    try {
-      const mealDoc = allMeals.find(m => m.date === selectedDate);
+
+    const docRef = db.collection('meals').doc(selectedDate);
+    const unsubscribe = docRef.onSnapshot((docSnap) => {
       const currentEntries: Record<string, { lunch: boolean; dinner: boolean; guestLunch?: number; guestDinner?: number }> = {};
       
-      if (mealDoc) {
+      if (docSnap.exists) {
+        const mealDoc = { id: docSnap.id, ...docSnap.data() } as DailyMealDoc;
         setNotes(mealDoc.notes || []);
         activeMembers.forEach(m => {
-          currentEntries[m.id] = mealDoc.entries?.[m.id] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
+          const entry = mealDoc.entries?.[m.id];
+          currentEntries[m.id] = {
+            lunch: entry?.lunch ?? false,
+            dinner: entry?.dinner ?? false,
+            guestLunch: Number(entry?.guestLunch) || 0,
+            guestDinner: Number(entry?.guestDinner) || 0
+          };
         });
       } else {
         const todayStr = format(new Date(), 'yyyy-MM-dd');
-        
+        setNotes([]);
         if (selectedDate >= todayStr) {
-            // Auto-populate for today and future dates
-            activeMembers.forEach(m => {
-              const defaultMeals = m.defaultMeals || { lunch: true, dinner: true };
-              currentEntries[m.id] = { lunch: defaultMeals.lunch, dinner: defaultMeals.dinner, guestLunch: 0, guestDinner: 0 };
-            });
-            
-            // Auto-save this initial configuration to the database if the user is authenticated
-            const currentUser = auth.currentUser;
-            if (currentUser && activeMembers.length > 0) {
-                try {
-                    await db.collection('meals').doc(selectedDate).set({
-                        date: selectedDate,
-                        entries: currentEntries
-                    }, { merge: true });
-                } catch (saveErr) {
-                    console.error("Auto-init save error:", saveErr);
-                }
-            }
+          // Preview default meals in UI state without modifying Firestore in the background
+          activeMembers.forEach(m => {
+            currentEntries[m.id] = {
+              lunch: m.defaultMeals?.lunch ?? true,
+              dinner: m.defaultMeals?.dinner ?? true,
+              guestLunch: 0,
+              guestDinner: 0
+            };
+          });
         } else {
-            // For past dates that don't exist in DB, just show 0 meals (no auto-population)
-            setNotes([]);
-            activeMembers.forEach(m => {
-              currentEntries[m.id] = { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
-            });
+          // Past dates: default to 0
+          activeMembers.forEach(m => {
+            currentEntries[m.id] = { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
+          });
         }
       }
       setEntries(currentEntries);
-      setPrice(settings?.mealPrice || 65);
-    } catch (err) {
-      console.error(err);
-    } finally {
       setLoading(false);
-    }
-  }, [selectedDate, dataLoading, allMeals, activeMembers, settings]);
+    }, (err) => {
+      console.error("Meal document listener error:", err);
+      setLoading(false);
+    });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    return () => unsubscribe();
+  }, [selectedDate, dataLoading, activeMembers]);
+
+  // Atomic member update: updates ONLY the specific member's entry in Firestore,
+  // preventing Desktop and Mobile from ever overwriting each other's changes.
+  const saveMemberEntry = async (memberId: string, updatedMemberEntry: any, allNewEntries: Record<string, any>) => {
+    const docRef = db.collection('meals').doc(selectedDate);
+    try {
+      await docRef.update({
+        [`entries.${memberId}`]: updatedMemberEntry
+      });
+    } catch (err: any) {
+      if (err.code === 'not-found' || err.message?.includes('No document to update')) {
+        await docRef.set({
+          date: selectedDate,
+          entries: allNewEntries
+        }, { merge: true });
+      } else {
+        throw err;
+      }
+    }
+  };
 
   const updateGuest = async (memberId: string, type: 'guestLunch' | 'guestDinner', count: number) => {
     if (!user) return;
     
+    const currentMemberEntry = entries[memberId] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
+    const updatedMemberEntry = {
+      ...currentMemberEntry,
+      [type]: count
+    };
     const newEntries = {
       ...entries,
-      [memberId]: {
-        ...entries[memberId],
-        [type]: count
-      }
+      [memberId]: updatedMemberEntry
     };
     
     setEntries(newEntries);
 
     try {
-      await db.collection('meals').doc(selectedDate).set({
-        date: selectedDate,
-        entries: newEntries
-      }, { merge: true });
+      await saveMemberEntry(memberId, updatedMemberEntry, newEntries);
     } catch (err) {
       console.error("Auto-save error:", err);
       showToast('error', 'Guest update failed.');
+      setEntries(entries);
     }
   };
 
   const toggleMeal = async (memberId: string, type: 'lunch' | 'dinner') => {
     if (!user) return;
     
+    const currentMemberEntry = entries[memberId] || { lunch: false, dinner: false, guestLunch: 0, guestDinner: 0 };
+    const updatedMemberEntry = {
+      ...currentMemberEntry,
+      [type]: !currentMemberEntry[type]
+    };
     const newEntries = {
       ...entries,
-      [memberId]: {
-        ...entries[memberId],
-        [type]: !entries[memberId][type]
-      }
+      [memberId]: updatedMemberEntry
     };
     
     setEntries(newEntries);
 
     try {
-      const docRef = db.collection('meals').doc(selectedDate);
-      await docRef.set({
-        date: selectedDate,
-        entries: newEntries
-      }, { merge: true });
+      await saveMemberEntry(memberId, updatedMemberEntry, newEntries);
     } catch (err) {
       console.error("Auto-save error:", err);
       showToast('error', 'Auto-save failed.');
+      setEntries(entries);
     }
   };
 
@@ -217,7 +230,7 @@ export const MealEntry: React.FC = () => {
         entries: entries
       }, { merge: true });
       
-      await logAction('Meal Entry', `Updated meals for ${selectedDate}`);
+      logAction('Meal Entry', `Updated meals for ${selectedDate}`).catch(console.error);
       showToast('success', 'Meals saved successfully!');
     } catch (err) {
       console.error(err);
@@ -245,7 +258,7 @@ export const MealEntry: React.FC = () => {
   const totalDinner = Object.values(entries).reduce((acc, curr) => acc + (curr.dinner ? 1 : 0) + (curr.guestDinner || 0), 0);
   const totalGuests = Object.values(entries).reduce((acc, curr) => acc + (curr.guestLunch || 0) + (curr.guestDinner || 0), 0);
   const totalMeals = totalLunch + totalDinner;
-  const totalCost = totalMeals * price;
+  const totalCost = calculateMealCost(totalMeals, price);
 
    // Toggle Component for Mobile
    const GuestSelector = ({ count, onChange, disabled }: any) => (

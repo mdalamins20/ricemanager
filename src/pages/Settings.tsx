@@ -7,16 +7,26 @@ import {
   Settings as SettingsIcon, Database,
   UserPlus, Edit3, Trash
 } from 'lucide-react';
-import { AppSettings, LogEntry, Member } from '../types';
+import { AppSettings, LogEntry, Member, MonthRateConfig } from '../types';
 import { logAction } from '../utils/logger';
 import { format } from 'date-fns';
+import { MonthPicker } from '../components/MonthPicker';
+import { getMealRateForMonth, getMonthRateConfig, formatMealRate, calculateMealCost } from '../utils/pricing';
+import { Package, Utensils, RotateCcw, Info, Sparkles, ChefHat, Globe, Radio, Wifi, WifiOff, MessageSquare } from 'lucide-react';
+import { testWhatsAppServerConnection, getWhatsAppApiUrl, DEFAULT_NGROK_URL } from '../utils/apiConfig';
 
 type Tab = 'general' | 'security' | 'logs' | 'auto_meals';
 
 export const Settings: React.FC = () => {
+  const [rawSettings, setRawSettings] = useState<AppSettings | null>(null);
   const [price, setPrice] = useState<number>(65);
   const [messName, setMessName] = useState<string>('');
   const [youtubeVideoUrl, setYoutubeVideoUrl] = useState<string>('');
+  const [vendorName, setVendorName] = useState<string>('');
+  const [vendorPhone, setVendorPhone] = useState<string>('');
+  const [whatsappServerUrl, setWhatsappServerUrl] = useState<string>('');
+  const [testingServer, setTestingServer] = useState(false);
+  const [serverTestResult, setServerTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -24,6 +34,15 @@ export const Settings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const notifyTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Smart Pricing State
+  const [selectedMonth, setSelectedMonth] = useState<string>(format(new Date(), 'yyyy-MM'));
+  const [isMonthSpecific, setIsMonthSpecific] = useState<boolean>(true);
+  const [pricingMode, setPricingMode] = useState<'per_meal' | 'monthly_package'>('monthly_package');
+  const [packageAmount, setPackageAmount] = useState<number>(4100);
+  const [packageDays, setPackageDays] = useState<number>(30);
+  const [packageMeals, setPackageMeals] = useState<number>(60);
+  const [perMealRate, setPerMealRate] = useState<number>(65);
 
   useEffect(() => {
     return () => {
@@ -40,6 +59,36 @@ export const Settings: React.FC = () => {
   // Danger Zone specific
   const [resetConfirm, setResetConfirm] = useState('');
 
+  const syncStateWithSettings = (data: AppSettings, monthStr: string) => {
+    setRawSettings(data);
+    setPrice(data.mealPrice || 65);
+    setMessName(data.messName || 'RiceMgr');
+    setYoutubeVideoUrl(data.youtubeVideoUrl || '');
+    setVendorName(data.vendorName || '');
+    setVendorPhone(data.vendorPhone || '');
+    setWhatsappServerUrl(data.whatsappServerUrl || DEFAULT_NGROK_URL);
+
+    const monthConfig = data.monthRates?.[monthStr];
+    if (monthConfig) {
+      setIsMonthSpecific(true);
+      setPricingMode(monthConfig.pricingMode || 'per_meal');
+      if (monthConfig.pricingMode === 'monthly_package') {
+        setPackageAmount(monthConfig.packageAmount || 4100);
+        setPackageDays(monthConfig.packageDays || 30);
+        setPackageMeals(monthConfig.packageMeals || 60);
+      } else {
+        setPerMealRate(monthConfig.mealPrice || 65);
+      }
+    } else {
+      // Default initial state when month not explicitly set
+      setPricingMode('monthly_package');
+      setPackageAmount(4100);
+      setPackageDays(30);
+      setPackageMeals(60);
+      setPerMealRate(data.mealPrice || 65);
+    }
+  };
+
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -47,9 +96,7 @@ export const Settings: React.FC = () => {
         const docSnap = await docRef.get();
         if (docSnap.exists) {
           const data = docSnap.data() as AppSettings;
-          setPrice(data.mealPrice);
-          setMessName(data.messName || 'RiceMgr');
-          setYoutubeVideoUrl(data.youtubeVideoUrl || '');
+          syncStateWithSettings(data, selectedMonth);
         }
       } catch (error) {
         console.error("Error fetching settings:", error);
@@ -59,6 +106,20 @@ export const Settings: React.FC = () => {
     };
     fetchSettings();
   }, []);
+
+  // When selectedMonth changes, load that month's config
+  const handleMonthChange = (newMonth: string) => {
+    setSelectedMonth(newMonth);
+    if (rawSettings) {
+      syncStateWithSettings(rawSettings, newMonth);
+    }
+  };
+
+  // Auto-update packageMeals when packageDays changes (if default 2 meals/day)
+  const handleDaysChange = (days: number) => {
+    setPackageDays(days);
+    setPackageMeals(days * 2);
+  };
 
   useEffect(() => {
     if (activeTab === 'logs') {
@@ -87,22 +148,118 @@ export const Settings: React.FC = () => {
     }
   }, [activeTab]);
 
+  const calculatedPackageRate = packageMeals > 0 ? (packageAmount / packageMeals) : 0;
+  const effectiveRate = pricingMode === 'monthly_package' ? calculatedPackageRate : Number(perMealRate);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setNotification(null);
     try {
-      await db.collection('settings').doc('config').set({
-        mealPrice: Number(price),
-        messName: messName,
-        youtubeVideoUrl: youtubeVideoUrl
-      }, { merge: true });
-      await logAction('Update Settings', `Updated settings (Price: ${price}, Name: ${messName})`);
-      setNotification({ type: 'success', message: 'Settings updated successfully!' });
-      setTimeout(() => setNotification(null), 3000);
+      const updatedMonthRates = { ...(rawSettings?.monthRates || {}) };
+
+      if (isMonthSpecific) {
+        if (pricingMode === 'monthly_package') {
+          updatedMonthRates[selectedMonth] = {
+            pricingMode: 'monthly_package',
+            mealPrice: calculatedPackageRate,
+            packageAmount: Number(packageAmount),
+            packageDays: Number(packageDays),
+            packageMeals: Number(packageMeals)
+          };
+        } else {
+          updatedMonthRates[selectedMonth] = {
+            pricingMode: 'per_meal',
+            mealPrice: Number(perMealRate)
+          };
+        }
+      }
+
+      const newSettingsData: AppSettings = {
+        mealPrice: !isMonthSpecific ? effectiveRate : (rawSettings?.mealPrice || 65),
+        monthRates: updatedMonthRates,
+        messName: messName || 'RiceMgr',
+        youtubeVideoUrl: youtubeVideoUrl || '',
+        vendorName: vendorName.trim(),
+        vendorPhone: vendorPhone.trim(),
+        whatsappServerUrl: whatsappServerUrl.trim()
+      };
+
+      await db.collection('settings').doc('config').set(newSettingsData, { merge: true });
+      setRawSettings(newSettingsData);
+      
+      const logDetails = isMonthSpecific 
+        ? `Updated month ${selectedMonth} pricing (Mode: ${pricingMode}, Rate: ৳${formatMealRate(effectiveRate)}/meal)`
+        : `Updated global default meal price (Price: ৳${formatMealRate(effectiveRate)}/meal)`;
+        
+      await logAction('Update Settings', logDetails);
+      triggerNotification('success', 'Settings updated successfully!');
     } catch (error) {
       console.error(error);
-      setNotification({ type: 'error', message: 'Failed to update settings.' });
+      triggerNotification('error', 'Failed to update settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestWhatsAppServer = async () => {
+    setTestingServer(true);
+    setServerTestResult(null);
+
+    let rawUrl = (whatsappServerUrl.trim() || getWhatsAppApiUrl(rawSettings) || DEFAULT_NGROK_URL).trim();
+    if (rawUrl && !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://')) {
+      rawUrl = `https://${rawUrl}`;
+    }
+    // Auto-fix if someone truncated -free.dev
+    if (rawUrl.includes('ngrok') && !rawUrl.includes('.dev') && !rawUrl.includes('.app') && !rawUrl.includes('.io')) {
+      rawUrl = rawUrl.replace(/(\.ngrok)(\/|$)/, '$1-free.dev$2');
+    }
+    setWhatsappServerUrl(rawUrl);
+
+    try {
+      const result = await testWhatsAppServerConnection(rawUrl);
+      if (result.success) {
+        setServerTestResult({
+          success: true,
+          message: `✅ সফলভাবে সংযোগ স্থাপিত হয়েছে! (স্ট্যাটাস: ${result.status === 'connected' ? 'কানেক্টেড (+' + (result.phone || '') + ')' : result.status}, লেটেন্সি: ${result.latencyMs}ms)`
+        });
+      } else {
+        setServerTestResult({
+          success: false,
+          message: `❌ সংযোগ ব্যর্থ: ${result.error || 'সার্ভার অফলাইন'}`
+        });
+      }
+    } catch (e: any) {
+      setServerTestResult({
+        success: false,
+        message: `❌ সংযোগ ব্যর্থ: ${e.message}`
+      });
+    } finally {
+      setTestingServer(false);
+    }
+  };
+
+  const handleResetMonth = async (monthKey: string) => {
+    if (!rawSettings?.monthRates?.[monthKey]) return;
+    setSaving(true);
+    try {
+      const updatedMonthRates = { ...(rawSettings.monthRates) };
+      delete updatedMonthRates[monthKey];
+
+      const newSettingsData: AppSettings = {
+        ...rawSettings,
+        monthRates: updatedMonthRates
+      };
+
+      await db.collection('settings').doc('config').set(newSettingsData, { merge: true });
+      setRawSettings(newSettingsData);
+      syncStateWithSettings(newSettingsData, selectedMonth);
+
+      await logAction('Update Settings', `Reset custom rate for month ${monthKey} to global default`);
+      triggerNotification('success', `Reset ${monthKey} rate to default!`);
+    } catch (error) {
+      console.error(error);
+      triggerNotification('error', 'Failed to reset month rate.');
     } finally {
       setSaving(false);
     }
@@ -122,14 +279,24 @@ export const Settings: React.FC = () => {
       URL.revokeObjectURL(url);
   };
 
-  const toggleAutoMeal = (memberId: string, type: 'lunch' | 'dinner') => {
-      setMembers(prev => prev.map(m => {
-          if (m.id === memberId) {
-              const currentDefault = m.defaultMeals || { lunch: true, dinner: true };
-              return { ...m, defaultMeals: { ...currentDefault, [type]: !currentDefault[type] } };
-          }
-          return m;
-      }));
+  const toggleAutoMeal = async (memberId: string, type: 'lunch' | 'dinner') => {
+      const targetMember = members.find(m => m.id === memberId);
+      if (!targetMember) return;
+      const currentDefault = targetMember.defaultMeals || { lunch: true, dinner: true };
+      const updatedDefault = { ...currentDefault, [type]: !currentDefault[type] };
+
+      // Optimistic state update
+      setMembers(prev => prev.map(m => m.id === memberId ? { ...m, defaultMeals: updatedDefault } : m));
+
+      try {
+          await db.collection('members').doc(memberId).update({ defaultMeals: updatedDefault });
+          triggerNotification('success', `${targetMember.fullName}: Auto ${type === 'lunch' ? 'Lunch' : 'Dinner'} ${updatedDefault[type] ? 'enabled' : 'disabled'}`);
+      } catch (err) {
+          console.error("Auto meal toggle save error:", err);
+          triggerNotification('error', 'Failed to update auto meal preference.');
+          // Revert on error
+          setMembers(prev => prev.map(m => m.id === memberId ? { ...m, defaultMeals: currentDefault } : m));
+      }
   };
 
   const saveAutoMeals = async () => {
@@ -265,43 +432,400 @@ export const Settings: React.FC = () => {
             
             {/* --- GENERAL TAB --- */}
             {activeTab === 'general' && (
-                <div className="animate-in fade-in slide-in-from-right-8 duration-300 max-w-2xl">
-                    <div className="mb-8">
-                        <h3 className="text-3xl font-black text-slate-800 dark:text-white tracking-tight mb-2">General Preferences</h3>
-                        <p className="text-slate-500 dark:text-slate-400">Manage the core identity and pricing rules for your mess.</p>
+                <div className="animate-in fade-in slide-in-from-right-8 duration-300 max-w-3xl space-y-8">
+                    <div>
+                        <h3 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-white tracking-tight mb-2">General Preferences & Meal Pricing</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-xs sm:text-sm">Manage mess meal rates, monthly budget packages (e.g. ৳4,100), and month-specific calculations.</p>
                     </div>
 
-                    <form onSubmit={handleSave} className="space-y-8">
-                        <div className="space-y-6">
-                            {/* Meal Price */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
-                                    Default Meal Price (৳)
-                                </label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                                        <span className="text-slate-400 font-bold text-lg">৳</span>
+                    <form onSubmit={handleSave} className="space-y-6">
+                        {/* Month Selector Bar */}
+                        <div className="bg-slate-50 dark:bg-slate-900/60 p-4 sm:p-5 rounded-3xl border border-slate-200/80 dark:border-slate-700/80 space-y-4 shadow-sm">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                                        Target Month
+                                    </label>
+                                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                                        Select Month for Rate Configuration
+                                    </span>
+                                </div>
+                                <MonthPicker 
+                                    value={selectedMonth} 
+                                    onChange={handleMonthChange}
+                                    className="w-full sm:w-auto"
+                                />
+                            </div>
+
+                            {/* Month Status Badge */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50 text-xs">
+                                <div className="flex items-center gap-2">
+                                    {rawSettings?.monthRates?.[selectedMonth] ? (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-bold text-xs">
+                                            <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                                            {selectedMonth}: Custom Rate Active (৳{formatMealRate(rawSettings.monthRates[selectedMonth].mealPrice)}/meal)
+                                        </span>
+                                    ) : (
+                                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs">
+                                            <Info className="h-3.5 w-3.5 text-slate-400" />
+                                            {selectedMonth}: Using Default Rate (৳{rawSettings?.mealPrice || 65}/meal)
+                                        </span>
+                                    )}
+                                </div>
+
+                                {rawSettings?.monthRates?.[selectedMonth] && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleResetMonth(selectedMonth)}
+                                        className="text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 flex items-center gap-1 hover:underline active:scale-95 transition-all"
+                                        title="Reset this month's custom rate to default"
+                                    >
+                                        <RotateCcw className="h-3.5 w-3.5" /> Reset to Default
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Pricing Mode Selection */}
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-3">
+                                Pricing Mode
+                            </label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                {/* Monthly Package Mode */}
+                                <div 
+                                    onClick={() => setPricingMode('monthly_package')}
+                                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                                        pricingMode === 'monthly_package' 
+                                            ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm' 
+                                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`p-2 rounded-xl ${pricingMode === 'monthly_package' ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                                <Package className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-sm text-slate-800 dark:text-white">Monthly Package Mode</h4>
+                                                <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">Recommended</span>
+                                            </div>
+                                        </div>
+                                        <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${pricingMode === 'monthly_package' ? 'border-emerald-500' : 'border-slate-300 dark:border-slate-600'}`}>
+                                            {pricingMode === 'monthly_package' && <div className="h-2 w-2 rounded-full bg-emerald-500" />}
+                                        </div>
                                     </div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                        e.g., ৳4,100 budget for 30 days (60 meals). Scales proportionally based on meals consumed.
+                                    </p>
+                                </div>
+
+                                {/* Per-Meal Fixed Mode */}
+                                <div 
+                                    onClick={() => setPricingMode('per_meal')}
+                                    className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex flex-col justify-between ${
+                                        pricingMode === 'per_meal' 
+                                            ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-sm' 
+                                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-white dark:bg-slate-900'
+                                    }`}
+                                >
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className={`p-2 rounded-xl ${pricingMode === 'per_meal' ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'}`}>
+                                                <Utensils className="h-5 w-5" />
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-sm text-slate-800 dark:text-white">Fixed Meal Rate Mode</h4>
+                                                <span className="text-[10px] font-medium text-slate-400">Fixed Rate</span>
+                                            </div>
+                                        </div>
+                                        <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${pricingMode === 'per_meal' ? 'border-emerald-500' : 'border-slate-300 dark:border-slate-600'}`}>
+                                            {pricingMode === 'per_meal' && <div className="h-2 w-2 rounded-full bg-emerald-500" />}
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                        Fixed price per individual meal (e.g., default ৳65/meal).
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Mode Inputs */}
+                        {pricingMode === 'monthly_package' ? (
+                            <div className="space-y-4 bg-slate-50/70 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                                    {/* Monthly Budget */}
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                                            Monthly Package Budget (৳)
+                                        </label>
+                                        <div className="relative">
+                                            <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 font-bold text-sm pointer-events-none">৳</span>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                required
+                                                value={packageAmount}
+                                                onChange={(e) => setPackageAmount(Number(e.target.value))}
+                                                className="w-full pl-8 pr-3 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
+                                                placeholder="4100"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Days in Month */}
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                                            Month Days
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="31"
+                                            required
+                                            value={packageDays}
+                                            onChange={(e) => handleDaysChange(Number(e.target.value))}
+                                            className="w-full px-3.5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
+                                            placeholder="30"
+                                        />
+                                    </div>
+
+                                    {/* Standard Meals */}
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1.5">
+                                            Standard Meals
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            required
+                                            value={packageMeals}
+                                            onChange={(e) => setPackageMeals(Number(e.target.value))}
+                                            className="w-full px-3.5 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
+                                            placeholder="60"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Effective Calculated Rate Highlight */}
+                                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                                        Effective Rate Per Meal (৳{packageAmount} ÷ {packageMeals} meals):
+                                    </span>
+                                    <span className="text-sm font-black text-emerald-700 dark:text-emerald-400">
+                                        ৳{formatMealRate(calculatedPackageRate)} / meal
+                                    </span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="bg-slate-50/70 dark:bg-slate-900/50 p-5 rounded-2xl border border-slate-200 dark:border-slate-700">
+                                <label className="block text-xs font-bold text-slate-600 dark:text-slate-300 mb-2">
+                                    Rate Per Meal (৳)
+                                </label>
+                                <div className="relative max-w-sm">
+                                    <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-400 font-bold text-sm pointer-events-none">৳</span>
                                     <input
                                         type="number"
+                                        step="any"
                                         min="0"
                                         required
-                                        value={price}
-                                        onChange={(e) => setPrice(Number(e.target.value))}
-                                        className="w-full pl-12 pr-5 py-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-800 dark:text-white font-bold text-lg transition-all"
-                                        placeholder="0"
+                                        value={perMealRate}
+                                        onChange={(e) => setPerMealRate(Number(e.target.value))}
+                                        className="w-full pl-8 pr-3 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-base text-slate-800 dark:text-white"
+                                        placeholder="65"
+                                    />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Scope Checkbox */}
+                        <div className="flex items-center gap-2.5 px-1">
+                            <input 
+                                type="checkbox" 
+                                id="monthScopeCheck"
+                                checked={isMonthSpecific}
+                                onChange={(e) => setIsMonthSpecific(e.target.checked)}
+                                className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer accent-emerald-600"
+                            />
+                            <label htmlFor="monthScopeCheck" className="text-xs text-slate-600 dark:text-slate-300 font-medium cursor-pointer">
+                                Apply this rate starting from <strong>{selectedMonth}</strong> (Historical months remain preserved)
+                            </label>
+                        </div>
+
+                        {/* Configured Months List */}
+                        {rawSettings?.monthRates && Object.keys(rawSettings.monthRates).length > 0 && (
+                            <div className="pt-2">
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-2">
+                                    Configured Month Rates
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                    {Object.entries(rawSettings.monthRates).map(([monthKey, config]) => (
+                                        <div 
+                                            key={monthKey} 
+                                            onClick={() => handleMonthChange(monthKey)}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                                                selectedMonth === monthKey 
+                                                    ? 'bg-emerald-500 text-white border-emerald-600 shadow-sm' 
+                                                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-400'
+                                            }`}
+                                        >
+                                            <span>{monthKey}: ৳{formatMealRate(config.mealPrice)}/meal</span>
+                                            {config.pricingMode === 'monthly_package' && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${selectedMonth === monthKey ? 'bg-emerald-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                                                    ৳{config.packageAmount}
+                                                </span>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Food Vendor / Cook Information */}
+                        <div className="bg-slate-50 dark:bg-slate-900/60 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-700/80 space-y-4">
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                    <ChefHat className="h-4 w-4 text-emerald-500" />
+                                    Food Provider / Vendor Contact (বাবুর্চি / ভেন্ডর তথ্য)
+                                </h4>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                    ভেন্ডরকে পেমেন্ট দেওয়ার সাথে সাথে এই নম্বরে স্বয়ংক্রিয় হোয়াটসঅ্যাপ রসিদ ও মাস শেষে পূর্ণাঙ্গ মিল হিসাব যাবে।
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                                        ভেন্ডর / বাবুর্চির নাম
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        value={vendorName}
+                                        onChange={(e) => setVendorName(e.target.value)}
+                                        placeholder="যেমন: খালা / বাবুর্চি / বুয়া"
+                                        className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                                        হোয়াটসঅ্যাপ মোবাইল নম্বর
+                                    </label>
+                                    <input 
+                                        type="text"
+                                        value={vendorPhone}
+                                        onChange={(e) => setVendorPhone(e.target.value)}
+                                        placeholder="যেমন: 017xxxxxxxx বা 88017xxxxxxxx"
+                                        className="w-full px-3.5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-sm text-slate-800 dark:text-white"
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="pt-2">
+                        {/* WhatsApp Server & Ngrok Permanent Tunnel Connection */}
+                        <div className="bg-slate-50 dark:bg-slate-900/60 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-700/80 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div>
+                                    <h4 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                        <Globe className="h-4 w-4 text-emerald-500" />
+                                        WhatsApp Server URL (পার্মানেন্ট Ngrok / অনলাইন ক্লাউড সংযোগ)
+                                    </h4>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                        অ্যাপটি Netlify বা মোবাইল থেকে চলার সময় আপনার ল্যাপটপের WhatsApp ইঞ্জিনের সাথে যুক্ত থাকতে এই পার্মানেন্ট লিংক ব্যবহৃত হবে।
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleTestWhatsAppServer}
+                                        disabled={testingServer}
+                                        className="px-3.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-emerald-500 hover:text-white text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
+                                    >
+                                        {testingServer ? (
+                                            <>
+                                                <div className="h-3.5 w-3.5 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+                                                টেস্টিং...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Radio className="h-3.5 w-3.5 text-emerald-500" />
+                                                কানেকশন টেস্ট করুন
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                                    সার্ভার বেস ইউআরএল (API Base URL)
+                                </label>
+                                <div className="relative">
+                                    <input 
+                                        type="url"
+                                        value={whatsappServerUrl}
+                                        onChange={(e) => {
+                                            setWhatsappServerUrl(e.target.value);
+                                            setServerTestResult(null);
+                                        }}
+                                        placeholder="https://unappreciably-nonsyllogistical-gonzalo.ngrok-free.dev"
+                                        className="w-full pl-3.5 pr-28 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none font-bold text-xs sm:text-sm text-slate-800 dark:text-white"
+                                    />
+                                    {whatsappServerUrl !== DEFAULT_NGROK_URL ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setWhatsappServerUrl(DEFAULT_NGROK_URL);
+                                                setServerTestResult(null);
+                                            }}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2.5 py-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 rounded-md transition-all active:scale-95"
+                                        >
+                                            স্থায়ী লিংক বসান
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => setWhatsappServerUrl('')}
+                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 px-2 py-1 text-[10px] font-bold text-slate-400 hover:text-rose-500 bg-slate-100 dark:bg-slate-700 rounded-md"
+                                        >
+                                            মুছুন
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Test Result Message */}
+                            {serverTestResult && (
+                                <div className={`p-3 rounded-xl border text-xs font-bold flex items-center gap-2 ${
+                                    serverTestResult.success 
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300' 
+                                    : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300'
+                                }`}>
+                                    {serverTestResult.success ? <Wifi className="h-4 w-4 shrink-0" /> : <WifiOff className="h-4 w-4 shrink-0" />}
+                                    <span>{serverTestResult.message}</span>
+                                </div>
+                            )}
+
+                            {/* Helpful Guide Note */}
+                            <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-800/60 rounded-xl text-[11px] text-slate-600 dark:text-slate-300 space-y-1">
+                                <div className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                                    <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                                    পার্মানেন্ট স্ট্যাটিক ডোমেইন সুবিধা
+                                </div>
+                                <p className="text-slate-600 dark:text-slate-400">
+                                    আপনার স্থায়ী ডোমেইন: <code className="px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded font-mono text-[10px] text-emerald-600 dark:text-emerald-400">https://unappreciably-nonsyllogistical-gonzalo.ngrok-free.dev</code><br />
+                                    এটি সিস্টেমে পার্মানেন্টভাবে যুক্ত হয়ে গেছে। আপনি ল্যাপটপ বন্ধ বা রিস্টার্ট করলেও উইন্ডোজ স্টার্টআপে এটি স্বয়ংক্রিয়ভাবে ব্যাকগ্রাউন্ডে চালু হবে এবং লিংক কখনোই পরিবর্তন হবে না।
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="pt-4">
                             <button type="submit" disabled={saving} className="px-8 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-200 dark:shadow-none active:scale-95 disabled:opacity-70">
                                 {saving ? (
                                     <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                                 ) : (
                                     <>
-                                        <Save className="h-5 w-5" /> Save Changes
+                                        <Save className="h-5 w-5" /> Save Preferences & Rates
                                     </>
                                 )}
                             </button>

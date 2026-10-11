@@ -6,6 +6,7 @@ import { auth } from './firebase';
 // Components & Pages
 import { Layout } from './components/Layout';
 import { AppProviders } from './contexts';
+import { AutoMonthEndScheduler } from './components/AutoMonthEndScheduler';
 
 // Lazy loaded pages
 const Login = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
@@ -55,6 +56,7 @@ const App: React.FC = () => {
 
   return (
     <AppProviders>
+      <AutoMonthEndScheduler />
       <HashRouter>
         <Layout>
           <Suspense fallback={<LoadingFallback />}>
