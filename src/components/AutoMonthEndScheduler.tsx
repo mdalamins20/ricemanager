@@ -15,6 +15,12 @@ export const AutoMonthEndScheduler: React.FC = () => {
   const { settings } = useSettings();
 
   const isRunningRef = useRef(false);
+  const dataRef = useRef({ members, allMeals, allDeposits, settings });
+
+  // Keep latest snapshot data fresh without causing useEffect to re-run
+  useEffect(() => {
+    dataRef.current = { members, allMeals, allDeposits, settings };
+  }, [members, allMeals, allDeposits, settings]);
 
   useEffect(() => {
     const checkAndTriggerMonthEnd = async () => {
@@ -32,16 +38,46 @@ export const AutoMonthEndScheduler: React.FC = () => {
       const hour = now.getHours();
       const isTargetHour = hour >= 18 && hour < 19;
 
-      // Check if already auto-dispatched this month
+      // Check if already auto-dispatched this month in local storage
       const sentFlagKey = `auto_statement_sent_${currentMonthKey}`;
-      const alreadySent = localStorage.getItem(sentFlagKey);
-
-      if (!isLastDay || !isTargetHour || alreadySent) {
+      if (localStorage.getItem(sentFlagKey)) {
         return;
       }
 
+      if (!isLastDay || !isTargetHour) {
+        return;
+      }
+
+      // 1. CLOUD DISTRIBUTED LOCK (Cross-Browser & Multi-Device Protection)
+      // Check Firestore to see if another device/tab is already dispatching or finished
+      const dispatchLockRef = db.collection('settings').doc(`auto_dispatch_${currentMonthKey}`);
+      try {
+        const lockSnap = await dispatchLockRef.get();
+        if (lockSnap.exists) {
+          const lockData = lockSnap.data();
+          if (lockData?.status === 'completed' || lockData?.status === 'in_progress') {
+            localStorage.setItem(sentFlagKey, 'true');
+            return;
+          }
+        }
+
+        // Acquire distributed lock atomically BEFORE any processing begins
+        await dispatchLockRef.set({
+          status: 'in_progress',
+          month: currentMonthKey,
+          startedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          dispatchedBy: auth.currentUser?.email || 'admin'
+        }, { merge: true });
+        localStorage.setItem(sentFlagKey, 'true');
+      } catch (lockErr) {
+        console.error('[AutoScheduler] Cloud lock error, aborting to prevent duplicate:', lockErr);
+        return;
+      }
+
+      const { members: currentMembers, allMeals: currentAllMeals, allDeposits: currentAllDeposits, settings: currentSettings } = dataRef.current;
+
       // Verify that WhatsApp server is running
-      const apiBase = getWhatsAppApiUrl(settings);
+      const apiBase = getWhatsAppApiUrl(currentSettings);
       try {
         const statusRes = await fetch(`${apiBase}/api/status`, {
           headers: getApiHeaders()
@@ -61,7 +97,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
       console.log(`[AutoScheduler] 🚀 Triggering automatic month-end statements for ${currentMonthKey}...`);
 
       try {
-        const currentMonthRate = getMealRateForMonth(settings, currentMonthKey);
+        const currentMonthRate = getMealRateForMonth(currentSettings, currentMonthKey);
         const [yStr, mStr] = currentMonthKey.split('-');
         const monthDate = new Date(parseInt(yStr, 10), parseInt(mStr, 10) - 1, 1);
         const monthName = format(monthDate, 'MMMM');
@@ -70,7 +106,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
         const { generatePDF } = await import('../utils/pdfGenerator');
 
         // Prepare report data for all active members
-        const activeMembers = members.filter(m => m.status === 'active');
+        const activeMembers = currentMembers.filter(m => m.status === 'active');
         let successCount = 0;
 
         for (const member of activeMembers) {
@@ -79,12 +115,12 @@ export const AutoMonthEndScheduler: React.FC = () => {
 
           // 1. Calculate previous balance
           let prevTotalDeposit = 0, prevMealCost = 0;
-          allDeposits.forEach(d => {
+          currentAllDeposits.forEach(d => {
             if (d.memberId === member.id && d.date < `${currentMonthKey}-01`) {
               prevTotalDeposit += d.amount;
             }
           });
-          allMeals.forEach(mDoc => {
+          currentAllMeals.forEach(mDoc => {
             if (mDoc.date < `${currentMonthKey}-01`) {
               const entry = mDoc.entries?.[member.id];
               if (entry) {
@@ -93,7 +129,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
                 if (entry.dinner) count++;
                 count += Number(entry.guestLunch) || 0;
                 count += Number(entry.guestDinner) || 0;
-                const r = getMealRateForMonth(settings, mDoc.date.slice(0, 7));
+                const r = getMealRateForMonth(currentSettings, mDoc.date.slice(0, 7));
                 prevMealCost += Math.round(count * r);
               }
             }
@@ -102,7 +138,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
 
           // 2. Calculate current month deposits
           let advanceDeposit = 0, finalDeposit = 0;
-          allDeposits.forEach(d => {
+          currentAllDeposits.forEach(d => {
             if (d.memberId === member.id && d.date.startsWith(currentMonthKey)) {
               if (d.type === 'final') finalDeposit += d.amount;
               else advanceDeposit += d.amount;
@@ -112,7 +148,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
           // 3. Calculate current month meals
           let totalMeals = 0;
           const dailyLogs: DailyLog[] = [];
-          allMeals.forEach(mDoc => {
+          currentAllMeals.forEach(mDoc => {
             if (mDoc.date.startsWith(currentMonthKey)) {
               const entry = mDoc.entries?.[member.id];
               if (entry) {
@@ -194,10 +230,10 @@ export const AutoMonthEndScheduler: React.FC = () => {
         }
 
         // Also dispatch to vendor if vendor phone is configured
-        const vendorPhone = formatWhatsAppPhone(settings?.vendorPhone);
+        const vendorPhone = formatWhatsAppPhone(currentSettings?.vendorPhone);
         if (vendorPhone) {
           let totalVendorMeals = 0;
-          allMeals.forEach(mDoc => {
+          currentAllMeals.forEach(mDoc => {
             if (mDoc.date.startsWith(currentMonthKey) && mDoc.entries) {
               Object.values(mDoc.entries).forEach(e => {
                 if (e.lunch) totalVendorMeals++;
@@ -223,7 +259,7 @@ export const AutoMonthEndScheduler: React.FC = () => {
             method: 'POST',
             headers: getApiHeaders(),
             body: JSON.stringify({
-              vendorName: settings?.vendorName || 'খালা / বাবুর্চি',
+              vendorName: currentSettings?.vendorName || 'খালা / বাবুর্চি',
               phone: vendorPhone,
               monthName: monthName,
               totalMeals: totalVendorMeals,
@@ -235,8 +271,14 @@ export const AutoMonthEndScheduler: React.FC = () => {
           }).catch(console.error);
         }
 
-        // Mark as sent for this month
+        // Mark as completed in cloud and local storage
         localStorage.setItem(sentFlagKey, 'true');
+        await dispatchLockRef.set({
+          status: 'completed',
+          month: currentMonthKey,
+          completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          successCount
+        }, { merge: true });
         console.log(`[AutoScheduler] ✅ Done! Automatically dispatched ${successCount} member statements.`);
       } catch (error) {
         console.error('[AutoScheduler] Error during automatic dispatch:', error);
@@ -245,11 +287,11 @@ export const AutoMonthEndScheduler: React.FC = () => {
       }
     };
 
-    // Run lightweight check on mount, then deep sleep with 15-minute interval (zero idle network/CPU usage)
+    // Run lightweight check on mount, then sleep with 15-minute interval
     checkAndTriggerMonthEnd();
     const interval = setInterval(checkAndTriggerMonthEnd, 15 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [members, allMeals, allDeposits, settings]);
+  }, []);
 
   return null;
 };

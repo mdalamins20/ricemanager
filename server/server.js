@@ -43,12 +43,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Periodic cleanup for rate limiter map
+// Periodic cleanup for rate limiter and statement cache
 setInterval(() => {
   const now = Date.now();
   for (const [ip, record] of requestCounts.entries()) {
     if (now - record.startTime > 120000) {
       requestCounts.delete(ip);
+    }
+  }
+  for (const [key, timestamp] of sentStatementsCache.entries()) {
+    if (now - timestamp > 24 * 60 * 60 * 1000) {
+      sentStatementsCache.delete(key);
     }
   }
 }, 60000);
@@ -298,16 +303,45 @@ app.post('/api/deposit-confirmation', async (req, res) => {
   }
 });
 
+// In-memory Sent Statements Cache (prevents duplicate dispatch even if 100 browser tabs trigger it)
+// Key format: `${monthKey}_${cleanPhone}` -> timestamp
+const sentStatementsCache = new Map();
+
+// Helper to clean and format phone for cache keys
+function getCacheKey(monthName, phone) {
+  const cleanPhone = String(phone).replace(/\D/g, '');
+  const cleanMonth = String(monthName).trim().toLowerCase();
+  return `${cleanMonth}_${cleanPhone}`;
+}
+
 // 4. Monthly Statement API (Sends Direct PDF Attachment or Text)
 app.post('/api/monthly-statement', async (req, res) => {
-  const { memberName, phone, monthName, totalMeals, mealRate, totalCost, prevBalance, totalDeposit, currentBalance, invoiceUrl, pdfBase64 } = req.body;
+  const { memberName, phone, monthName, totalMeals, mealRate, totalCost, prevBalance, totalDeposit, currentBalance, invoiceUrl, pdfBase64, force } = req.body;
   if (!phone || !memberName) {
     return res.status(400).json({ success: false, error: 'Member name and phone required' });
+  }
+
+  // Deduplication check: Has this member already received this month's statement within the last 12 hours?
+  const cacheKey = getCacheKey(monthName, phone);
+  const now = Date.now();
+  const lastSentTime = sentStatementsCache.get(cacheKey);
+
+  if (!force && lastSentTime && (now - lastSentTime < 12 * 60 * 60 * 1000)) {
+    const minutesAgo = Math.round((now - lastSentTime) / 60000);
+    logActivity('DUPLICATE_BLOCKED', `Blocked duplicate statement for ${memberName} (${phone}) - already sent ${minutesAgo}m ago`);
+    return res.json({ 
+      success: true, 
+      skipped: true, 
+      message: `Already dispatched ${minutesAgo} minutes ago. Duplicate blocked by server.` 
+    });
   }
 
   if (connectionStatus !== 'connected' || !sock) {
     return res.status(503).json({ success: false, error: 'WhatsApp bot is not connected' });
   }
+
+  // Lock cache immediately to prevent simultaneous in-flight race conditions
+  sentStatementsCache.set(cacheKey, now);
 
   try {
     const jid = await resolveJid(phone);
@@ -431,14 +465,32 @@ app.post('/api/vendor-payment-receipt', async (req, res) => {
 
 // 7. Vendor Monthly Statement API
 app.post('/api/vendor-monthly-statement', async (req, res) => {
-  const { vendorName, phone, monthName, totalMeals, mealRate, totalCost, totalPaid, dueAmount } = req.body;
+  const { vendorName, phone, monthName, totalMeals, mealRate, totalCost, totalPaid, dueAmount, force } = req.body;
   if (!phone) {
     return res.status(400).json({ success: false, error: 'Vendor phone required' });
+  }
+
+  // Deduplication check: Has the vendor already received this month's statement within 12 hours?
+  const cacheKey = `vendor_${getCacheKey(monthName, phone)}`;
+  const now = Date.now();
+  const lastSentTime = sentStatementsCache.get(cacheKey);
+
+  if (!force && lastSentTime && (now - lastSentTime < 12 * 60 * 60 * 1000)) {
+    const minutesAgo = Math.round((now - lastSentTime) / 60000);
+    logActivity('DUPLICATE_BLOCKED', `Blocked duplicate statement for vendor (${phone}) - already sent ${minutesAgo}m ago`);
+    return res.json({ 
+      success: true, 
+      skipped: true, 
+      message: `Already dispatched ${minutesAgo} minutes ago. Duplicate blocked by server.` 
+    });
   }
 
   if (connectionStatus !== 'connected' || !sock) {
     return res.status(503).json({ success: false, error: 'WhatsApp bot is not connected' });
   }
+
+  // Lock cache immediately
+  sentStatementsCache.set(cacheKey, now);
 
   try {
     const jid = await resolveJid(phone);
